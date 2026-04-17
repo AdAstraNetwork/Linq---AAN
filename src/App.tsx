@@ -2309,6 +2309,144 @@ function SettingsMenu({
         total_cards_held: myActiveCardsCount
       });
 
+      // 5. Seed global_posts (posts + polls from users and vendors)
+      const existingPostsSnap = await getDocs(query(collection(db, 'global_posts'), limit(1)));
+      if (existingPostsSnap.empty) {
+        const d1 = dummyUsers[0], d2 = dummyUsers[1], d3 = dummyUsers[2];
+        const d4 = dummyUsers[3], d5 = dummyUsers[4], d6 = dummyUsers[5];
+        const d7 = dummyUsers[6], d8 = dummyUsers[7], d9 = dummyUsers[8];
+        const storeNames = sampleStores.map(s => s.name);
+        const storePics = [
+          "https://picsum.photos/seed/coffee/200/200",
+          "https://picsum.photos/seed/beauty/200/200",
+          "https://picsum.photos/seed/gym/200/200",
+          "https://picsum.photos/seed/barber/200/200",
+          "https://picsum.photos/seed/salad/200/200",
+        ];
+
+        const postsToSeed = [
+          // --- User regular posts ---
+          {
+            authorUid: d1.uid, authorName: d1.name, authorPhoto: d1.photoURL, authorRole: "consumer",
+            content: "Just hit my 8th stamp at The Daily Grind ☕ Free coffee is so close I can taste it!",
+            postType: "post", likesCount: 14, likedBy: [d2.uid, d3.uid, d4.uid, d5.uid, d6.uid, d7.uid, profile.uid],
+            pollOptions: null, pollVotes: null
+          },
+          {
+            authorUid: d2.uid, authorName: d2.name, authorPhoto: d2.photoURL, authorRole: "consumer",
+            content: "Glow Beauty Bar just gave me the best facial I've ever had. The staff are incredible and the loyalty rewards make it even better 💅",
+            postType: "post", likesCount: 22, likedBy: [d1.uid, d3.uid, d5.uid, d8.uid, d9.uid, profile.uid],
+            pollOptions: null, pollVotes: null
+          },
+          {
+            authorUid: d3.uid, authorName: d3.name, authorPhoto: d3.photoURL, authorRole: "consumer",
+            content: "Iron Haven Gym is genuinely changing my life. Two months in and I've already redeemed my first free session reward. Anyone else training there? 💪",
+            postType: "post", likesCount: 18, likedBy: [d4.uid, d5.uid, d6.uid, d1.uid, profile.uid],
+            pollOptions: null, pollVotes: null
+          },
+          {
+            authorUid: d4.uid, authorName: d4.name, authorPhoto: d4.photoURL, authorRole: "consumer",
+            content: "PSA: The Barber Shop now has Sunday hours 🙌 Got my fresh cut this morning and earned my 5th stamp. One more and I get a free service!",
+            postType: "post", likesCount: 9, likedBy: [d2.uid, d7.uid, d8.uid],
+            pollOptions: null, pollVotes: null
+          },
+          {
+            authorUid: d5.uid, authorName: d5.name, authorPhoto: d5.photoURL, authorRole: "consumer",
+            content: "Green Leaf Salads for lunch every day this week. No regrets and 4 stamps richer 🥗 Who else is on their health journey?",
+            postType: "post", likesCount: 11, likedBy: [d1.uid, d3.uid, d6.uid, d9.uid],
+            pollOptions: null, pollVotes: null
+          },
+          {
+            authorUid: d6.uid, authorName: d6.name, authorPhoto: d6.photoURL, authorRole: "consumer",
+            content: "Linq is genuinely the best loyalty app I've used. Actually motivates me to go back to the same spots 🔥",
+            postType: "post", likesCount: 31, likedBy: [d1.uid, d2.uid, d3.uid, d4.uid, d5.uid, d7.uid, d8.uid, d9.uid, profile.uid],
+            pollOptions: null, pollVotes: null
+          },
+          // --- Vendor posts ---
+          {
+            authorUid: "vendor_daily_grind", authorName: "The Daily Grind", authorPhoto: storePics[0], authorRole: "vendor",
+            storeName: storeNames[0],
+            content: "🎉 DOUBLE STAMPS this entire weekend! Friday through Sunday — every purchase earns you 2x stamps. Come on in and level up your card faster. See you soon! ☕",
+            postType: "post", likesCount: 47, likedBy: [d1.uid, d2.uid, d3.uid, d4.uid, d5.uid, d6.uid, d7.uid, d8.uid, profile.uid],
+            pollOptions: null, pollVotes: null
+          },
+          {
+            authorUid: "vendor_glow_beauty", authorName: "Glow Beauty Bar", authorPhoto: storePics[1], authorRole: "vendor",
+            storeName: storeNames[1],
+            content: "✨ NEW: Our summer skincare range has arrived. Book any facial this week and receive 3 BONUS stamps. Spaces are filling up fast — book via the link in bio!",
+            postType: "post", likesCount: 35, likedBy: [d2.uid, d5.uid, d8.uid, d9.uid, profile.uid],
+            pollOptions: null, pollVotes: null
+          },
+          {
+            authorUid: "vendor_iron_haven", authorName: "Iron Haven Gym", authorPhoto: storePics[2], authorRole: "vendor",
+            storeName: storeNames[2],
+            content: "New Olympic lifting platform just dropped 💪 First 20 members to use it this week get an extra stamp added to their card. First come, first served!",
+            postType: "post", likesCount: 28, likedBy: [d3.uid, d6.uid, d7.uid, profile.uid],
+            pollOptions: null, pollVotes: null
+          },
+          // --- User polls ---
+          {
+            authorUid: d7.uid, authorName: d7.name, authorPhoto: d7.photoURL, authorRole: "consumer",
+            content: "Which local business deserves more love? 👇",
+            postType: "poll",
+            pollOptions: [{ text: "The Daily Grind ☕" }, { text: "Glow Beauty Bar 💅" }, { text: "Iron Haven Gym 💪" }, { text: "The Barber Shop ✂️" }],
+            pollVotes: { "0": [d1.uid, d2.uid, d5.uid], "1": [d3.uid, d8.uid, d9.uid, profile.uid], "2": [d4.uid, d6.uid], "3": [d7.uid] },
+            likesCount: 8, likedBy: [d1.uid, d2.uid, d3.uid, d4.uid]
+          },
+          {
+            authorUid: d8.uid, authorName: d8.name, authorPhoto: d8.photoURL, authorRole: "consumer",
+            content: "What's your ideal loyalty reward? 🎁",
+            postType: "poll",
+            pollOptions: [{ text: "Free item / drink" }, { text: "Percentage discount" }, { text: "Bonus stamps" }, { text: "Exclusive experience" }],
+            pollVotes: { "0": [d1.uid, d3.uid, d6.uid, profile.uid], "1": [d2.uid, d4.uid, d7.uid], "2": [d5.uid, d9.uid], "3": [d8.uid] },
+            likesCount: 12, likedBy: [d2.uid, d5.uid, d6.uid, d7.uid, d8.uid]
+          },
+          {
+            authorUid: d9.uid, authorName: d9.name, authorPhoto: d9.photoURL, authorRole: "consumer",
+            content: "How many loyalty cards are you actively collecting right now? 🃏",
+            postType: "poll",
+            pollOptions: [{ text: "1–2 cards" }, { text: "3–5 cards" }, { text: "6–10 cards" }, { text: "10+ cards (collector mode)" }],
+            pollVotes: { "0": [d4.uid, d5.uid], "1": [d1.uid, d2.uid, d6.uid, d8.uid, profile.uid], "2": [d3.uid, d7.uid], "3": [d9.uid] },
+            likesCount: 7, likedBy: [d1.uid, d3.uid, d9.uid]
+          },
+          // --- Vendor polls ---
+          {
+            authorUid: "vendor_daily_grind", authorName: "The Daily Grind", authorPhoto: storePics[0], authorRole: "vendor",
+            storeName: storeNames[0],
+            content: "Help us choose our next seasonal special! ☕ Vote below 👇",
+            postType: "poll",
+            pollOptions: [{ text: "Pumpkin Spice Latte 🎃" }, { text: "Iced Matcha Coconut 🍵" }, { text: "Lavender Honey Flat White 🌸" }, { text: "Chai Oat Bomb 🧡" }],
+            pollVotes: { "0": [d1.uid, d4.uid, d7.uid], "1": [d2.uid, d5.uid, d8.uid, profile.uid], "2": [d3.uid, d9.uid], "3": [d6.uid] },
+            likesCount: 19, likedBy: [d1.uid, d2.uid, d3.uid, d4.uid, d5.uid, profile.uid]
+          },
+          {
+            authorUid: "vendor_iron_haven", authorName: "Iron Haven Gym", authorPhoto: storePics[2], authorRole: "vendor",
+            storeName: storeNames[2],
+            content: "We're extending our opening hours! When would you use the gym most? 🏋️",
+            postType: "poll",
+            pollOptions: [{ text: "Earlier mornings (5am open)" }, { text: "Late nights (until 11pm)" }, { text: "Weekend afternoons" }, { text: "All of the above!" }],
+            pollVotes: { "0": [d3.uid, d7.uid], "1": [d1.uid, d4.uid, d6.uid], "2": [d5.uid, d8.uid], "3": [d2.uid, d9.uid, profile.uid] },
+            likesCount: 23, likedBy: [d3.uid, d4.uid, d5.uid, d6.uid, d7.uid, profile.uid]
+          },
+          {
+            authorUid: "vendor_barber", authorName: "The Barber Shop", authorPhoto: storePics[3], authorRole: "vendor",
+            storeName: storeNames[3],
+            content: "What new service should we add to our menu? Your vote decides! ✂️",
+            postType: "poll",
+            pollOptions: [{ text: "Hot towel shave" }, { text: "Hair colouring" }, { text: "Scalp treatment" }, { text: "Men's facials" }],
+            pollVotes: { "0": [d1.uid, d2.uid, d4.uid, d6.uid], "1": [d3.uid, d8.uid], "2": [d5.uid, d9.uid], "3": [d7.uid, profile.uid] },
+            likesCount: 15, likedBy: [d2.uid, d4.uid, d8.uid]
+          },
+        ];
+
+        for (const post of postsToSeed) {
+          await addDoc(collection(db, 'global_posts'), {
+            ...post,
+            createdAt: serverTimestamp()
+          });
+        }
+      }
+
       alert("Sample data successfully seeded! Users, Businesses, and consistent statistics are ready.");
       window.location.reload();
     } catch (error) {
@@ -2471,6 +2609,198 @@ function ProfileLink({ icon, label, onClick }: { icon: React.ReactNode, label: s
 }
 
 // --- Social & Community Components ---
+
+function FeedPostCard({ post, currentUser, onViewUser, onLike, onVote }: {
+  post: GlobalPost;
+  currentUser?: FirebaseUser;
+  onViewUser: (u: UserProfile) => void;
+  onLike: (post: GlobalPost) => void;
+  onVote: (post: GlobalPost, optionIndex: number) => void;
+}) {
+  const [showInteractions, setShowInteractions] = useState(false);
+  const isLiked = currentUser ? (post.likedBy || []).includes(currentUser.uid) : false;
+  const totalVotes = post.postType === 'poll'
+    ? Object.values(post.pollVotes || {}).reduce((s, arr) => s + (arr?.length || 0), 0)
+    : 0;
+  const userVoteKey = currentUser
+    ? Object.keys(post.pollVotes || {}).find(k => (post.pollVotes![k] || []).includes(currentUser.uid))
+    : undefined;
+  const likesCount = post.likesCount || 0;
+  const totalEngagement = likesCount + totalVotes;
+
+  const handleAvatarClick = async () => {
+    try {
+      const snap = await getDoc(doc(db, 'users', post.authorUid));
+      if (snap.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile);
+    } catch {/* seed users may not exist in users collection */}
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-white rounded-[2rem] overflow-hidden border border-black/5 shadow-sm"
+    >
+      {/* Post header */}
+      <div className="px-5 pt-5 pb-3 space-y-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full overflow-hidden border border-black/5 cursor-pointer shrink-0" onClick={handleAvatarClick}>
+            <img src={post.authorPhoto || `https://i.pravatar.cc/40?u=${post.authorUid}`} alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="font-bold text-sm">{post.authorName}</p>
+              {post.authorRole === 'vendor' && (
+                <span className="px-2 py-0.5 bg-brand-gold/10 rounded-full text-[9px] font-bold text-brand-gold uppercase tracking-wide">Vendor</span>
+              )}
+              {post.storeName && (
+                <span className="text-[10px] text-brand-navy/40">· {post.storeName}</span>
+              )}
+            </div>
+            <p className="text-[10px] text-brand-navy/40 font-medium">
+              {post.createdAt ? format(post.createdAt.toDate(), 'MMM d · h:mm a') : 'Just now'}
+            </p>
+          </div>
+          {post.postType === 'poll' && (
+            <div className="w-7 h-7 bg-brand-gold/10 rounded-lg flex items-center justify-center shrink-0">
+              <BarChart2 size={14} className="text-brand-gold" />
+            </div>
+          )}
+        </div>
+
+        {post.content && (
+          <p className="text-sm text-brand-navy leading-relaxed">{post.content}</p>
+        )}
+
+        {post.postType === 'poll' && post.pollOptions && (
+          <div className="space-y-2 pt-1">
+            {post.pollOptions.map((opt, i) => {
+              const voteCount = (post.pollVotes?.[String(i)] || []).length;
+              const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+              const voted = userVoteKey === String(i);
+              return (
+                <button
+                  key={i}
+                  onClick={() => onVote(post, i)}
+                  className={cn(
+                    "w-full text-left rounded-xl overflow-hidden border-2 transition-all active:scale-[0.98]",
+                    voted ? "border-brand-gold" : "border-black/6 hover:border-brand-gold/40"
+                  )}
+                >
+                  <div className="relative px-4 py-2.5 min-h-[42px] flex items-center">
+                    <div
+                      className={cn(
+                        "absolute left-0 top-0 bottom-0 rounded-[10px] transition-all duration-500",
+                        voted ? "bg-brand-gold/20" : "bg-brand-navy/5"
+                      )}
+                      style={{ width: `${Math.max(pct, 4)}%` }}
+                    />
+                    <div className="relative flex items-center justify-between w-full gap-2">
+                      <div className="flex items-center gap-2">
+                        {voted && <CheckCircle2 size={14} className="text-brand-gold shrink-0" />}
+                        <span className={cn("text-sm font-medium", voted && "font-bold")}>{opt.text}</span>
+                      </div>
+                      <span className={cn("text-xs font-bold shrink-0", voted ? "text-brand-gold" : "text-brand-navy/40")}>{pct}%</span>
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Interactions bar */}
+      <div className="px-5 pb-4 border-t border-black/5 pt-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => onLike(post)}
+              className={cn(
+                "flex items-center gap-1.5 transition-all active:scale-95 text-sm font-bold",
+                isLiked ? "text-brand-gold" : "text-brand-navy/30 hover:text-brand-gold"
+              )}
+            >
+              <Heart size={18} className={cn("transition-all", isLiked ? "fill-brand-gold scale-110" : "")} />
+              <span>{likesCount}</span>
+            </button>
+
+            {post.postType === 'poll' && (
+              <div className="flex items-center gap-1.5 text-brand-navy/30 text-sm font-bold">
+                <BarChart2 size={18} />
+                <span>{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</span>
+              </div>
+            )}
+          </div>
+
+          {totalEngagement > 0 && (
+            <button
+              onClick={() => setShowInteractions(v => !v)}
+              className="flex items-center gap-1.5 text-[11px] font-bold text-brand-navy/30 hover:text-brand-navy/60 transition-colors"
+            >
+              {totalEngagement} interaction{totalEngagement !== 1 ? 's' : ''}
+              <ChevronRight size={12} className={cn("transition-transform", showInteractions && "rotate-90")} />
+            </button>
+          )}
+        </div>
+
+        {/* Expanded interactions panel */}
+        <AnimatePresence>
+          {showInteractions && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="pt-3 space-y-3">
+                {likesCount > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-brand-navy/40 uppercase tracking-widest mb-1.5">
+                      ❤️ {likesCount} Like{likesCount !== 1 ? 's' : ''}
+                    </p>
+                    <div className="flex -space-x-1.5">
+                      {(post.likedBy || []).slice(0, 8).map((uid, idx) => (
+                        <div key={uid} className="w-6 h-6 rounded-full overflow-hidden border-2 border-white" style={{ zIndex: 8 - idx }}>
+                          <img src={`https://i.pravatar.cc/24?u=${uid}`} alt="" className="w-full h-full object-cover" />
+                        </div>
+                      ))}
+                      {likesCount > 8 && (
+                        <div className="w-6 h-6 rounded-full bg-brand-navy/10 border-2 border-white flex items-center justify-center">
+                          <span className="text-[8px] font-bold text-brand-navy/60">+{likesCount - 8}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {post.postType === 'poll' && post.pollOptions && totalVotes > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-brand-navy/40 uppercase tracking-widest mb-1.5">
+                      📊 {totalVotes} Vote{totalVotes !== 1 ? 's' : ''}
+                    </p>
+                    <div className="space-y-1">
+                      {post.pollOptions.map((opt, i) => {
+                        const voteCount = (post.pollVotes?.[String(i)] || []).length;
+                        const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+                        return (
+                          <div key={i} className="flex items-center gap-2 text-xs">
+                            <span className="text-brand-navy/60 font-medium truncate flex-1">{opt.text}</span>
+                            <span className="font-bold text-brand-navy/50 shrink-0">{voteCount} · {pct}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
 
 function CreatePostModal({ onClose, user, profile }: { onClose: () => void, user: FirebaseUser, profile: UserProfile | null }) {
   const [content, setContent] = useState('');
@@ -2778,93 +3108,15 @@ function ForYouScreen({ onViewUser, onViewStore, notifications, currentUser, cur
           {displayFeed.map((item) => {
             const isGlobal = !item._type;
             if (isGlobal) {
-              const post = item as GlobalPost;
-              const isLiked = currentUser ? (post.likedBy || []).includes(currentUser.uid) : false;
-              const totalVotes = post.postType === 'poll'
-                ? Object.values(post.pollVotes || {}).reduce((s, arr) => s + (arr?.length || 0), 0)
-                : 0;
-              const userVoteKey = currentUser
-                ? Object.keys(post.pollVotes || {}).find(k => (post.pollVotes![k] || []).includes(currentUser.uid))
-                : undefined;
               return (
-                <motion.div key={`gp-${post.id}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-[2rem] overflow-hidden">
-                  <div className="p-5 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div
-                        className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 cursor-pointer shrink-0"
-                        onClick={async () => {
-                          const snap = await getDoc(doc(db, 'users', post.authorUid));
-                          if (snap.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile);
-                        }}
-                      >
-                        <img src={post.authorPhoto || `https://picsum.photos/seed/${post.authorUid}/40`} alt="" className="w-full h-full object-cover" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-bold text-sm truncate">{post.authorName}</p>
-                          {post.authorRole === 'vendor' && (
-                            <span className="px-2 py-0.5 bg-brand-gold/10 rounded-full text-[9px] font-bold text-brand-gold uppercase tracking-wide shrink-0">Vendor</span>
-                          )}
-                          {post.storeName && (
-                            <span className="text-[10px] text-brand-navy/40 truncate">• {post.storeName}</span>
-                          )}
-                        </div>
-                        <p className="text-[10px] text-brand-navy/40 font-medium">
-                          {post.createdAt ? format(post.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}
-                        </p>
-                      </div>
-                      {post.postType === 'poll' && (
-                        <div className="shrink-0 w-7 h-7 bg-brand-gold/10 rounded-lg flex items-center justify-center">
-                          <BarChart2 size={14} className="text-brand-gold" />
-                        </div>
-                      )}
-                    </div>
-
-                    {post.content && <p className="text-sm text-brand-navy/90 leading-relaxed">{post.content}</p>}
-
-                    {post.postType === 'poll' && post.pollOptions && (
-                      <div className="space-y-2 pt-1">
-                        {post.pollOptions.map((opt, i) => {
-                          const voteCount = (post.pollVotes?.[String(i)] || []).length;
-                          const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
-                          const voted = userVoteKey === String(i);
-                          return (
-                            <button
-                              key={i}
-                              onClick={() => handleVote(post, i)}
-                              className={cn(
-                                "w-full text-left rounded-xl overflow-hidden border transition-all",
-                                voted ? "border-brand-gold" : "border-brand-navy/10 hover:border-brand-gold/40"
-                              )}
-                            >
-                              <div className="relative px-4 py-2.5">
-                                <div
-                                  className={cn("absolute inset-0 transition-all", voted ? "bg-brand-gold/15" : "bg-brand-navy/5")}
-                                  style={{ width: `${pct}%` }}
-                                />
-                                <div className="relative flex items-center justify-between">
-                                  <span className="text-sm font-medium">{opt.text}</span>
-                                  <span className="text-xs font-bold text-brand-navy/50">{pct}%</span>
-                                </div>
-                              </div>
-                            </button>
-                          );
-                        })}
-                        <p className="text-[10px] text-brand-navy/30 font-medium">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</p>
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-5 pt-1 border-t border-brand-navy/5">
-                      <button
-                        onClick={() => handleLike(post)}
-                        className={cn("flex items-center gap-1.5 transition-colors text-xs font-bold", isLiked ? "text-brand-gold" : "text-brand-navy/30 hover:text-brand-gold")}
-                      >
-                        <Heart size={16} className={isLiked ? "fill-brand-gold" : ""} />
-                        {post.likesCount || 0}
-                      </button>
-                    </div>
-                  </div>
-                </motion.div>
+                <FeedPostCard
+                  key={`gp-${item.id}`}
+                  post={item as GlobalPost}
+                  currentUser={currentUser}
+                  onViewUser={onViewUser}
+                  onLike={handleLike}
+                  onVote={handleVote}
+                />
               );
             } else {
               return (
