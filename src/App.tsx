@@ -325,6 +325,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     const seedDemoPosts = async () => {
       try {
         const snap = await getDocs(query(collection(db, 'global_posts'), limit(1)));
@@ -470,7 +471,7 @@ export default function App() {
       }
     };
     seedDemoPosts();
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
