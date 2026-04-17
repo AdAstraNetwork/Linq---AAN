@@ -4,22 +4,59 @@
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Outfit", sans-serif;
-  
-  --color-brand-navy: #1B2B4B;
-  --color-brand-gold: #F5A623;
-  --color-brand-bg: #F8F9FB;
+
+  --color-brand-navy: #B91C1C;
+  --color-brand-gold: #F87171;
+  --color-brand-bg: #FFF5F5;
+  --color-brand-crimson: #991B1B;
+  --color-brand-rose: #FECACA;
 }
 
 @layer base {
   body {
-    @apply bg-brand-bg text-brand-navy font-sans antialiased;
+    @apply font-sans antialiased;
+    background: linear-gradient(135deg, #fff5f5 0%, #ffffff 40%, #fef2f2 100%);
+    min-height: 100vh;
+    color: var(--color-brand-navy);
   }
 }
 
 .card-shadow {
-  box-shadow: 0 10px 30px -10px rgba(27, 43, 75, 0.1);
+  box-shadow: 0 10px 30px -10px rgba(185, 28, 28, 0.15);
 }
 
 .glass-panel {
-  @apply bg-white/80 backdrop-blur-lg border border-white/20;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(254, 202, 202, 0.4);
+  box-shadow: 0 8px 32px rgba(185, 28, 28, 0.08);
+}
+
+.gradient-red {
+  background: linear-gradient(135deg, #B91C1C 0%, #DC2626 50%, #EF4444 100%);
+}
+
+.gradient-card {
+  background: linear-gradient(135deg, rgba(185, 28, 28, 0.92) 0%, rgba(220, 38, 38, 0.95) 100%);
+}
+
+.gradient-soft {
+  background: linear-gradient(135deg, #FFF5F5 0%, #FEE2E2 100%);
+}
+
+@keyframes scan {
+  0% { top: 0; }
+  100% { top: 100%; }
+}
+
+.animate-scan {
+  animation: scan 2s ease-in-out infinite;
 }

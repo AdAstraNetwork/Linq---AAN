@@ -167,29 +167,13 @@ interface Card {
   isRedeemed?: boolean;
 }
 
-interface FriendRequest {
-  id: string;
-  fromUid: string;
-  fromName: string;
-  fromPhoto: string;
-  toUid: string;
-  status: 'pending' | 'accepted' | 'declined';
-  createdAt: any;
-}
-
-interface Friendship {
-  id: string;
-  uids: string[];
-  createdAt: any;
-}
-
 interface Notification {
   id: string;
   toUid: string;
   fromUid: string;
   fromName: string;
   fromPhoto: string;
-  type: 'friend_request' | 'system' | 'like' | 'mention';
+  type: 'follow' | 'system' | 'like' | 'mention';
   message: string;
   isRead: boolean;
   createdAt: any;
@@ -354,7 +338,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-brand-bg flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{background: 'linear-gradient(135deg, #fff5f5 0%, #ffffff 40%, #fef2f2 100%)'}}>
         <motion.div 
           animate={{ rotate: 360 }}
           transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
@@ -370,12 +354,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-brand-bg pb-24 max-w-md mx-auto shadow-2xl shadow-brand-navy/10 relative overflow-hidden">
+    <div className="min-h-screen pb-24 max-w-md mx-auto shadow-2xl shadow-brand-navy/10 relative overflow-hidden" style={{background: 'linear-gradient(160deg, #fff5f5 0%, #ffffff 50%, #fef2f2 100%)'}}>
       {/* Header */}
       <header className="glass-panel sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-brand-navy rounded-lg flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-brand-gold" />
+          <div className="w-8 h-8 gradient-red rounded-lg flex items-center justify-center">
+            <Sparkles className="w-5 h-5 text-white" />
           </div>
           <h1 className="font-display font-bold text-xl tracking-tight">GlowLoyalty</h1>
         </div>
@@ -507,14 +491,14 @@ export default function App() {
 
 function LandingPage({ onLogin }: { onLogin: () => void }) {
   return (
-    <div className="min-h-screen bg-brand-navy flex flex-col items-center justify-center px-8 text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center" style={{background: 'linear-gradient(160deg, #7f1d1d 0%, #b91c1c 40%, #dc2626 70%, #ef4444 100%)'}}>
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mb-12"
       >
-        <div className="w-24 h-24 bg-brand-gold rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-brand-gold/20">
-          <Sparkles className="w-12 h-12 text-brand-navy" />
+        <div className="w-24 h-24 bg-white/20 backdrop-blur-sm rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-black/20 border border-white/30">
+          <Sparkles className="w-12 h-12 text-white" />
         </div>
         <h1 className="font-display text-4xl font-bold text-white mb-4">GlowLoyalty</h1>
         <p className="text-white/60 text-lg max-w-xs mx-auto">
@@ -525,12 +509,12 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
       <div className="w-full max-w-xs space-y-4">
         <button 
           onClick={onLogin}
-          className="w-full bg-brand-gold text-brand-navy font-bold py-4 rounded-2xl flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all"
+          className="w-full bg-white text-brand-navy font-bold py-4 rounded-2xl flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg"
         >
           <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="" />
           Continue with Google
         </button>
-        <button className="w-full bg-white/10 text-white font-bold py-4 rounded-2xl hover:bg-white/20 transition-all">
+        <button className="w-full bg-white/15 backdrop-blur-sm text-white font-bold py-4 rounded-2xl hover:bg-white/25 transition-all border border-white/20">
           Create Account
         </button>
       </div>
@@ -640,7 +624,7 @@ function ConsumerApp({ activeTab, setActiveTab, profile, user, onViewStore, onVi
                 return <LoyaltyCard key={card.id} card={card} store={store} onViewStore={onViewStore} />;
               })
             ) : (
-              <div className="bg-white p-10 rounded-[2.5rem] border-2 border-dashed border-brand-navy/5 text-center">
+              <div className="glass-card p-10 rounded-[2.5rem] border-2 border-dashed border-brand-rose/40 text-center">
                 <div className="w-16 h-16 bg-brand-bg rounded-full flex items-center justify-center mx-auto mb-4">
                   <Wallet className="w-8 h-8 text-brand-navy/20" />
                 </div>
@@ -829,7 +813,7 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
 
   if (!store && activeTab !== 'profile') {
     return (
-      <div className="bg-white p-10 rounded-[2.5rem] border-2 border-dashed border-brand-navy/5 text-center space-y-6">
+      <div className="glass-card p-10 rounded-[2.5rem] border-2 border-dashed border-brand-rose/40 text-center space-y-6">
         <div className="w-20 h-20 bg-brand-bg rounded-full flex items-center justify-center mx-auto">
           <Store className="w-10 h-10 text-brand-navy/20" />
         </div>
@@ -955,7 +939,7 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
           <div className="space-y-4">
             <h3 className="font-display text-xl font-bold">Recent Activity</h3>
             {recentTransactions.map(tx => (
-              <div key={tx.id} className="bg-white p-4 rounded-2xl flex items-center gap-4 border border-brand-navy/5">
+              <div key={tx.id} className="glass-card p-4 rounded-2xl flex items-center gap-4">
                 <div className="w-10 h-10 bg-brand-bg rounded-full flex items-center justify-center">
                   <UserIcon className="w-5 h-5 text-brand-navy/40" />
                 </div>
@@ -1162,8 +1146,8 @@ function LoyaltyCard({ card, store, onViewStore }: { card: Card, store?: StorePr
         whileTap={{ scale: 0.98 }}
         onClick={() => !isCompleted && setShowQR(true)}
         className={cn(
-          "bg-white p-6 rounded-[2.5rem] card-shadow border relative overflow-hidden transition-all",
-          isCompleted ? "border-brand-gold bg-brand-gold/5" : "border-brand-navy/5 cursor-pointer"
+          "glass-card p-6 rounded-[2.5rem] border relative overflow-hidden transition-all",
+          isCompleted ? "border-brand-gold/40 bg-red-50/60" : "border-transparent cursor-pointer"
         )}
       >
         <div className="absolute top-4 right-4 flex items-center gap-2">
@@ -1194,7 +1178,7 @@ function LoyaltyCard({ card, store, onViewStore }: { card: Card, store?: StorePr
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
-              className="absolute top-14 right-4 z-20 bg-white border border-brand-navy/5 rounded-2xl shadow-xl p-2 min-w-[140px]"
+              className="absolute top-14 right-4 z-20 glass-panel rounded-2xl shadow-xl p-2 min-w-[140px]"
             >
               <button 
                 onClick={handleDelete}
@@ -1250,7 +1234,7 @@ function LoyaltyCard({ card, store, onViewStore }: { card: Card, store?: StorePr
           </div>
         ) : isCompleted ? (
           <div className="space-y-4">
-            <div className="bg-white p-4 rounded-2xl border border-brand-gold/20 text-center">
+            <div className="glass-card p-4 rounded-2xl border border-brand-gold/20 text-center">
               <Gift className="w-8 h-8 text-brand-gold mx-auto mb-2" />
               <p className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Your Reward</p>
               <p className="font-bold text-brand-navy">Free Gift / Discount</p>
@@ -1296,7 +1280,7 @@ function LoyaltyCard({ card, store, onViewStore }: { card: Card, store?: StorePr
               initial={{ scale: 0.9, y: 20, opacity: 0 }}
               animate={{ scale: 1, y: 0, opacity: 1 }}
               exit={{ scale: 0.9, y: 20, opacity: 0 }}
-              className="bg-white w-full max-w-sm p-10 rounded-[3.5rem] text-center relative z-10 shadow-2xl"
+              className="glass-panel w-full max-w-sm p-10 rounded-[3.5rem] text-center relative z-10 shadow-2xl"
             >
               <div className="w-24 h-24 bg-brand-gold/20 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Trophy className="w-12 h-12 text-brand-gold" />
@@ -1304,7 +1288,7 @@ function LoyaltyCard({ card, store, onViewStore }: { card: Card, store?: StorePr
               <h3 className="font-display text-3xl font-bold mb-2">Congratulations!</h3>
               <p className="text-brand-navy/60 mb-8">You've reached {limit} stamps at {store?.name}! Show this screen to the shop staff to claim your reward.</p>
               
-              <div className="bg-brand-bg p-6 rounded-3xl mb-8 border-2 border-dashed border-brand-gold/30">
+              <div className="bg-red-50/80 p-6 rounded-3xl mb-8 border-2 border-dashed border-brand-gold/40">
                 <p className="text-[10px] font-bold text-brand-gold uppercase tracking-widest mb-2">Staff Action Required</p>
                 <p className="text-sm font-bold text-brand-navy">Scan NFC Tag or Stamp again to confirm redemption</p>
               </div>
@@ -1341,16 +1325,16 @@ function LoyaltyCard({ card, store, onViewStore }: { card: Card, store?: StorePr
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white w-full max-w-xs p-8 rounded-[3rem] text-center relative z-10"
+              className="glass-panel w-full max-w-xs p-8 rounded-[3rem] text-center relative z-10"
             >
               <h3 className="font-display text-2xl font-bold mb-2">{store?.name}</h3>
               <p className="text-brand-navy/60 text-sm mb-8">Show this code to the vendor to receive your stamp.</p>
-              <div className="bg-brand-bg p-6 rounded-3xl mb-8 flex justify-center">
+              <div className="bg-white/80 p-6 rounded-3xl mb-8 flex justify-center border border-brand-rose/20">
                 <QRCodeSVG value={`stamp:${auth.currentUser?.uid}:${card.store_id}`} size={200} />
               </div>
 
               {/* Test Controls */}
-              <div className="mb-8 p-4 bg-brand-bg rounded-2xl border border-brand-navy/5">
+              <div className="mb-8 p-4 glass-card rounded-2xl">
                 <p className="text-[10px] font-bold text-brand-navy/40 uppercase tracking-widest mb-3">Test: Simulate Stamp</p>
                 <div className="flex gap-2">
                   <input 
@@ -1391,7 +1375,7 @@ function StoreCard({ store, card, onJoin, onClick }: { store: StoreProfile, card
   return (
     <div 
       onClick={onClick}
-      className="bg-white p-4 rounded-3xl border border-brand-navy/5 flex items-center gap-4 hover:shadow-lg transition-all cursor-pointer group"
+      className="glass-card p-4 rounded-3xl flex items-center gap-4 hover:shadow-lg transition-all cursor-pointer group"
     >
       <div className="w-20 h-20 rounded-2xl overflow-hidden shrink-0">
         <img src={store.logoUrl || `https://picsum.photos/seed/${store.id}/200/200`} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform" />
@@ -1473,7 +1457,7 @@ function DiscoveryScreen({ stores, cards, onJoin, onViewStore, onViewUser }: { s
       <header>
         <h2 className="font-display text-3xl font-bold mb-4">Discovery</h2>
         <div className="space-y-4">
-          <div className="flex gap-2 p-1 bg-white rounded-2xl border border-brand-navy/5">
+          <div className="flex gap-2 p-1 glass-card rounded-2xl">
             <button 
               onClick={() => setSearchType('stores')}
               className={cn(
@@ -1502,7 +1486,7 @@ function DiscoveryScreen({ stores, cards, onJoin, onViewStore, onViewUser }: { s
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={searchType === 'stores' ? "Search businesses..." : "Search users..."}
-              className="w-full pl-12 pr-4 py-4 rounded-2xl bg-white border border-brand-navy/5 focus:outline-none focus:ring-2 focus:ring-brand-gold/20 font-medium"
+              className="w-full pl-12 pr-4 py-4 rounded-2xl glass-card border-brand-rose/20 focus:outline-none focus:ring-2 focus:ring-brand-navy/20 font-medium"
             />
           </div>
         </div>
@@ -1517,7 +1501,7 @@ function DiscoveryScreen({ stores, cards, onJoin, onViewStore, onViewUser }: { s
                 onClick={() => setActiveCategory(cat)}
                 className={cn(
                   "px-6 py-2 rounded-full text-sm font-bold whitespace-nowrap transition-all",
-                  activeCategory === cat ? "bg-brand-navy text-white" : "bg-white border border-brand-navy/5 text-brand-navy/40 hover:bg-brand-bg"
+                  activeCategory === cat ? "bg-brand-navy text-white shadow-md" : "glass-card text-brand-navy/50 hover:text-brand-navy"
                 )}
               >
                 {cat}
@@ -1558,7 +1542,7 @@ function DiscoveryScreen({ stores, cards, onJoin, onViewStore, onViewUser }: { s
               {filteredUsers.map(u => (
                 <div 
                   key={u.uid} 
-                  className="bg-white p-4 rounded-2xl border border-brand-navy/5 flex items-center justify-between cursor-pointer hover:border-brand-gold/30 transition-all animation-fade-in"
+                  className="glass-card p-4 rounded-2xl flex items-center justify-between cursor-pointer hover:shadow-md transition-all"
                   onClick={() => onViewUser(u)}
                 >
                   <div className="flex items-center gap-3">
@@ -1651,7 +1635,7 @@ function WallPostItem({ post, currentUser }: { post: any, currentUser: FirebaseU
   };
 
   return (
-    <div className="bg-white p-6 rounded-[2.5rem] border border-brand-navy/5 space-y-4 shadow-sm animation-fade-in">
+    <div className="glass-card p-6 rounded-[2.5rem] space-y-4 animation-fade-in">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5">
@@ -1733,7 +1717,7 @@ function WallPostItem({ post, currentUser }: { post: any, currentUser: FirebaseU
 
 function StatSquare({ icon, label, value }: { icon: React.ReactNode, label: string, value: string }) {
   return (
-    <div className="bg-white aspect-square rounded-[2rem] border border-brand-navy/5 flex flex-col items-center justify-center p-4 shadow-sm hover:shadow-md transition-all">
+    <div className="glass-card aspect-square rounded-[2rem] flex flex-col items-center justify-center p-4 hover:shadow-md transition-all">
       <div className="w-10 h-10 bg-brand-bg rounded-2xl flex items-center justify-center mb-2">
         {React.cloneElement(icon as React.ReactElement, { size: 20 })}
       </div>
@@ -1757,7 +1741,7 @@ function Modal({ title, children, onClose }: { title: string, children: React.Re
         initial={{ y: 100, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 100, opacity: 0 }}
-        className="bg-white w-full max-w-md rounded-t-[3rem] sm:rounded-[3rem] p-8 relative z-10 max-h-[80vh] overflow-y-auto"
+        className="glass-panel w-full max-w-md rounded-t-[3rem] sm:rounded-[3rem] p-8 relative z-10 max-h-[80vh] overflow-y-auto"
       >
         <div className="flex items-center justify-between mb-8">
           <h3 className="font-display text-2xl font-bold">{title}</h3>
@@ -1779,7 +1763,7 @@ function CardBuilder({ store }: { store: StoreProfile | null }) {
         <p className="text-brand-navy/60">Design your loyalty experience.</p>
       </header>
 
-      <div className="bg-white p-8 rounded-[2.5rem] border border-brand-navy/5 space-y-6">
+      <div className="glass-card p-8 rounded-[2.5rem] space-y-6">
         <div className="space-y-2">
           <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Card Name</label>
           <input defaultValue={store?.name} className="w-full p-4 rounded-2xl bg-brand-bg border-none focus:ring-2 focus:ring-brand-gold/20 font-bold" />
@@ -1813,44 +1797,44 @@ function CardBuilder({ store }: { store: StoreProfile | null }) {
 }
 
 function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { profile: UserProfile | null, userCards: Card[], onLogout: () => void, onViewUser: (u: UserProfile) => void, user: FirebaseUser }) {
-  const [activeSubTab, setActiveSubTab] = useState<'friends' | 'wall'>('wall');
-  const [friends, setFriends] = useState<UserProfile[]>([]);
-  const [pendingRequests, setPendingRequests] = useState<FriendRequest[]>([]);
+  const [activeSubTab, setActiveSubTab] = useState<'following' | 'wall'>('wall');
+  const [following, setFollowing] = useState<UserProfile[]>([]);
+  const [followers, setFollowers] = useState<UserProfile[]>([]);
+  const [showFollowModal, setShowFollowModal] = useState(false);
   const [posts, setPosts] = useState<any[]>([]);
   const [newPost, setNewPost] = useState('');
   const [rating, setRating] = useState(5);
   const [isPosting, setIsPosting] = useState(false);
-  const [loadingFriends, setLoadingFriends] = useState(false);
 
   useEffect(() => {
     if (!profile?.uid) return;
-    setLoadingFriends(true);
 
-    const fq = query(collection(db, 'friendships'), where('uids', 'array-contains', profile.uid));
-    const unsubFriendships = onSnapshot(fq, async (snap) => {
-      const uids = snap.docs.map(d => (d.data() as Friendship).uids.find(id => id !== profile.uid)!);
-      if (uids.length > 0) {
-        // Query users by these UIDs (Note: Firestore 'in' limit is 30)
-        const batchSize = 30;
-        const results: UserProfile[] = [];
-        for (let i = 0; i < uids.length; i += batchSize) {
-          const batch = uids.slice(i, i + batchSize);
-          const usersQ = query(collection(db, 'users'), where('uid', 'in', batch));
-          const usersSnap = await getDocs(usersQ);
-          results.push(...usersSnap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
-        }
-        setFriends(results);
-      } else {
-        setFriends([]);
+    const fetchUsers = async (uids: string[]) => {
+      if (uids.length === 0) return [];
+      const results: UserProfile[] = [];
+      for (let i = 0; i < uids.length; i += 30) {
+        const batch = uids.slice(i, i + 30);
+        const snap = await getDocs(query(collection(db, 'users'), where('uid', 'in', batch)));
+        results.push(...snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
       }
-      setLoadingFriends(false);
-    });
+      return results;
+    };
 
-    // Fetch pending friend requests
-    const rq = query(collection(db, 'friend_requests'), where('toUid', '==', profile.uid), where('status', '==', 'pending'));
-    const unsubRequests = onSnapshot(rq, (snap) => {
-      setPendingRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as FriendRequest)));
-    });
+    const unsubFollowing = onSnapshot(
+      query(collection(db, 'follows'), where('followerUid', '==', profile.uid)),
+      async (snap) => {
+        const uids = snap.docs.map(d => d.data().followingUid as string);
+        setFollowing(await fetchUsers(uids));
+      }
+    );
+
+    const unsubFollowers = onSnapshot(
+      query(collection(db, 'follows'), where('followingUid', '==', profile.uid)),
+      async (snap) => {
+        const uids = snap.docs.map(d => d.data().followerUid as string);
+        setFollowers(await fetchUsers(uids));
+      }
+    );
 
     const pq = query(collection(db, 'user_reviews'), where('toUid', '==', profile.uid), orderBy('createdAt', 'desc'));
     const unsubPosts = onSnapshot(pq, (snap) => {
@@ -1858,43 +1842,11 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
     });
 
     return () => {
-      unsubFriendships();
-      unsubRequests();
+      unsubFollowing();
+      unsubFollowers();
       unsubPosts();
     };
   }, [profile?.uid]);
-
-  const handleAcceptRequest = async (request: FriendRequest) => {
-    try {
-      // 1. Update request status
-      await updateDoc(doc(db, 'friend_requests', request.id), { status: 'accepted' });
-      
-      // 2. Create friendship
-      const friendshipId = [user.uid, request.fromUid].sort().join('_');
-      await setDoc(doc(db, 'friendships', friendshipId), {
-        uids: [user.uid, request.fromUid],
-        createdAt: serverTimestamp()
-      });
-
-      // 3. Create notification for the sender
-      await addDoc(collection(db, 'notifications'), {
-        toUid: request.fromUid,
-        fromUid: user.uid,
-        fromName: profile?.name || user.displayName || 'Friend',
-        fromPhoto: profile?.photoURL || user.photoURL || '',
-        type: 'system',
-        message: `${profile?.name || 'Your friend'} accepted your request!`,
-        isRead: false,
-        createdAt: serverTimestamp()
-      });
-    } catch (err) {
-      console.error("Accept friend error:", err);
-    }
-  };
-
-  const handleDeclineRequest = async (requestId: string) => {
-    await updateDoc(doc(db, 'friend_requests', requestId), { status: 'declined' });
-  };
 
   const handlePostOnWall = async () => {
     if (!newPost.trim() || !profile) return;
@@ -1925,7 +1877,6 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
   const totalStamps = lifetimeStamps;
   const archivedCardsCount = profile.totalRedeemed || 0;
   const activeCardsCount = userCards.filter(c => !c.isArchived).length;
-  const [showFriendsModal, setShowFriendsModal] = useState(false);
 
   return (
     <div className="space-y-6 pb-20 text-brand-navy">
@@ -1940,30 +1891,32 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatSquare icon={<CheckCircle2 className="text-brand-gold" />} label="Stamps" value={totalStamps.toString()} />
         <StatSquare icon={<Trophy className="text-brand-gold" />} label="Rewards" value={archivedCardsCount.toString()} />
-        <div onClick={() => setShowFriendsModal(true)} className="cursor-pointer">
-          <StatSquare icon={<Users className="text-brand-gold" />} label="Friends" value={friends.length.toString()} />
+        <div onClick={() => setShowFollowModal(true)} className="cursor-pointer">
+          <StatSquare icon={<Users className="text-brand-gold" />} label="Following" value={following.length.toString()} />
         </div>
-        <StatSquare icon={<LayoutDashboard className="text-brand-gold" />} label="Active" value={activeCardsCount.toString()} />
+        <div onClick={() => setShowFollowModal(true)} className="cursor-pointer">
+          <StatSquare icon={<UserPlus className="text-brand-gold" />} label="Followers" value={followers.length.toString()} />
+        </div>
       </div>
 
-      <div className="flex p-1 bg-white border border-brand-navy/5 rounded-2xl">
-        <button 
+      <div className="flex p-1 glass-card rounded-2xl">
+        <button
           onClick={() => setActiveSubTab('wall')}
           className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all", activeSubTab === 'wall' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}
         >
           My Wall
         </button>
-        <button 
-          onClick={() => setActiveSubTab('friends')}
-          className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all", activeSubTab === 'friends' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}
+        <button
+          onClick={() => setActiveSubTab('following')}
+          className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all", activeSubTab === 'following' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}
         >
-          Community
+          Following
         </button>
       </div>
 
       {activeSubTab === 'wall' && (
         <div className="space-y-6">
-          <div className="bg-white p-6 rounded-[2.5rem] border border-brand-navy/5 space-y-4 shadow-sm">
+          <div className="glass-card p-6 rounded-[2.5rem] space-y-4">
             <h3 className="font-bold text-sm px-2">Post an Update</h3>
             <textarea 
               value={newPost}
@@ -1996,98 +1949,92 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
         </div>
       )}
 
-      {activeSubTab === 'friends' && (
+      {activeSubTab === 'following' && (
         <div className="space-y-4">
-          <h3 className="font-display text-xl font-bold px-2">Recent Community Activity</h3>
-          {friends.slice(0, 5).map(friend => (
-            <div key={friend.uid} className="bg-white p-4 rounded-2xl border border-brand-navy/5 flex items-center justify-between">
+          <h3 className="font-display text-xl font-bold px-2">People You Follow</h3>
+          {following.slice(0, 5).map(u => (
+            <div key={u.uid} className="glass-card p-4 rounded-2xl flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5">
-                  <img src={friend.photoURL} alt="" className="w-full h-full object-cover" />
+                  <img src={u.photoURL} alt="" className="w-full h-full object-cover" />
                 </div>
                 <div>
-                  <p className="font-bold text-sm">{friend.name}</p>
-                  <p className="text-[10px] text-brand-navy/40 font-bold uppercase tracking-widest">Collecting at 3 Stores</p>
+                  <p className="font-bold text-sm">{u.name}</p>
+                  <p className="text-[10px] text-brand-navy/40 font-bold uppercase tracking-widest">@{u.email?.split('@')[0]}</p>
                 </div>
               </div>
-              <button 
-                onClick={() => onViewUser(friend)}
+              <button
+                onClick={() => onViewUser(u)}
                 className="p-2 text-brand-gold hover:bg-brand-bg rounded-xl transition-colors"
               >
                 <ChevronRight size={20} />
               </button>
             </div>
           ))}
+          {following.length === 0 && (
+            <div className="py-12 text-center text-brand-navy/20">
+              <Users size={48} className="mx-auto mb-4 opacity-10" />
+              <p className="text-sm font-bold">Not following anyone yet</p>
+              <p className="text-xs">Find people in the Community tab!</p>
+            </div>
+          )}
         </div>
       )}
 
       <AnimatePresence>
-        {showFriendsModal && (
-          <Modal title="Friends & Requests" onClose={() => setShowFriendsModal(false)}>
+        {showFollowModal && (
+          <Modal title="Following & Followers" onClose={() => setShowFollowModal(false)}>
             <div className="space-y-6">
-              {pendingRequests.length > 0 && (
-                <div className="space-y-3">
-                  <h4 className="text-[10px] font-bold uppercase tracking-widest text-brand-gold px-2">Friend Requests</h4>
-                  <div className="space-y-2">
-                    {pendingRequests.map(req => (
-                      <div key={req.id} className="flex items-center justify-between p-4 bg-brand-gold/5 rounded-3xl border border-brand-gold/10">
-                        <div className="flex items-center gap-3">
-                          <img src={req.fromPhoto} alt="" className="w-10 h-10 rounded-xl" />
-                          <div>
-                            <p className="font-bold text-sm text-brand-navy">{req.fromName}</p>
-                            <p className="text-[10px] text-brand-navy/40 font-bold">Wants to be friends</p>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button 
-                            onClick={() => handleAcceptRequest(req)}
-                            className="w-10 h-10 flex items-center justify-center bg-brand-gold text-brand-navy rounded-xl shadow-lg shadow-brand-gold/20 hover:scale-105 active:scale-95 transition-all"
-                          >
-                            <UserCheck size={18} />
-                          </button>
-                          <button 
-                            onClick={() => handleDeclineRequest(req.id)}
-                            className="w-10 h-10 flex items-center justify-center bg-brand-navy/5 text-brand-navy rounded-xl hover:bg-brand-navy/10 transition-all"
-                          >
-                            <X size={18} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-3">
-                <h4 className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40 px-2">Your Friends ({friends.length})</h4>
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-brand-gold px-2">Following ({following.length})</h4>
                 <div className="space-y-2">
-                  {friends.map(friend => (
-                    <div 
-                      key={friend.uid} 
+                  {following.map(u => (
+                    <div
+                      key={u.uid}
                       className="flex items-center justify-between p-4 rounded-3xl bg-brand-bg hover:bg-brand-gold/5 transition-colors cursor-pointer group"
-                      onClick={() => {
-                        onViewUser(friend);
-                        setShowFriendsModal(false);
-                      }}
+                      onClick={() => { onViewUser(u); setShowFollowModal(false); }}
                     >
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 rounded-2xl overflow-hidden border border-brand-navy/5">
-                          <img src={friend.photoURL} alt="" className="w-full h-full object-cover" />
+                          <img src={u.photoURL} alt="" className="w-full h-full object-cover" />
                         </div>
                         <div>
-                          <p className="font-bold text-brand-navy group-hover:text-brand-gold transition-colors">{friend.name}</p>
-                          <p className="text-xs text-brand-navy/40 font-bold tracking-widest uppercase">@ {friend.email?.split('@')[0]}</p>
+                          <p className="font-bold text-brand-navy group-hover:text-brand-gold transition-colors">{u.name}</p>
+                          <p className="text-xs text-brand-navy/40 font-bold tracking-widest uppercase">@{u.email?.split('@')[0]}</p>
                         </div>
                       </div>
-                      <Users size={20} className="text-brand-navy/10 group-hover:text-brand-gold transition-colors" />
+                      <ChevronRight size={20} className="text-brand-navy/10 group-hover:text-brand-gold transition-colors" />
                     </div>
                   ))}
-                  {friends.length === 0 && (
-                    <div className="py-20 text-center">
-                      <Users size={48} className="mx-auto mb-4 opacity-5" />
-                      <p className="text-xs text-brand-navy/40 font-bold uppercase tracking-[0.2em]">Your friend list is empty</p>
-                      <p className="text-[10px] text-brand-navy/20 mt-1">Accept requests or find people on discovery!</p>
+                  {following.length === 0 && (
+                    <p className="text-xs text-brand-navy/40 text-center py-6">Not following anyone yet</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <h4 className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40 px-2">Followers ({followers.length})</h4>
+                <div className="space-y-2">
+                  {followers.map(u => (
+                    <div
+                      key={u.uid}
+                      className="flex items-center justify-between p-4 rounded-3xl bg-brand-bg hover:bg-brand-gold/5 transition-colors cursor-pointer group"
+                      onClick={() => { onViewUser(u); setShowFollowModal(false); }}
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-2xl overflow-hidden border border-brand-navy/5">
+                          <img src={u.photoURL} alt="" className="w-full h-full object-cover" />
+                        </div>
+                        <div>
+                          <p className="font-bold text-brand-navy group-hover:text-brand-gold transition-colors">{u.name}</p>
+                          <p className="text-xs text-brand-navy/40 font-bold tracking-widest uppercase">@{u.email?.split('@')[0]}</p>
+                        </div>
+                      </div>
+                      <ChevronRight size={20} className="text-brand-navy/10 group-hover:text-brand-gold transition-colors" />
                     </div>
+                  ))}
+                  {followers.length === 0 && (
+                    <p className="text-xs text-brand-navy/40 text-center py-6">No followers yet</p>
                   )}
                 </div>
               </div>
@@ -2353,7 +2300,7 @@ function SettingsMenu({
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
         exit={{ y: "100%" }}
-        className="bg-brand-bg w-full max-w-md rounded-t-[3rem] p-8 space-y-6 max-h-[90vh] overflow-y-auto"
+        className="glass-panel w-full max-w-md rounded-t-[3rem] p-8 space-y-6 max-h-[90vh] overflow-y-auto"
         onClick={e => e.stopPropagation()}
       >
         <div className="flex items-center justify-between mb-2">
@@ -2401,7 +2348,7 @@ function SettingsMenu({
             <Modal title="Archived Cards" onClose={() => setShowArchive(false)}>
               <div className="space-y-4">
                 {archivedCards.map(card => (
-                  <div key={card.id} className="bg-white p-4 rounded-2xl border border-brand-navy/5">
+                  <div key={card.id} className="glass-card p-4 rounded-2xl">
                     <div className="flex items-center justify-between mb-2">
                       <p className="font-bold text-sm">Completed Program</p>
                       <span className="text-[10px] font-bold text-brand-gold uppercase">Archived</span>
@@ -2543,7 +2490,7 @@ function ForYouScreen({ onViewUser, onViewStore, notifications }: { onViewUser: 
         <p className="text-brand-navy/60 text-sm">Latest updates from your community.</p>
       </header>
 
-      <div className="flex p-1 bg-white border border-brand-navy/5 rounded-2xl">
+      <div className="flex p-1 glass-card rounded-2xl">
         <button 
           onClick={() => setActiveSubTab('feed')}
           className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2", activeSubTab === 'feed' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}
@@ -2576,7 +2523,7 @@ function ForYouScreen({ onViewUser, onViewStore, notifications }: { onViewUser: 
               key={`${item.type}-${item.id}`}
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="bg-white p-6 rounded-[2.5rem] border border-brand-navy/5 space-y-4 shadow-sm"
+              className="glass-card p-6 rounded-[2.5rem] space-y-4"
             >
               {item.type === 'post' ? (
                 <>
@@ -2665,17 +2612,17 @@ function ForYouScreen({ onViewUser, onViewStore, notifications }: { onViewUser: 
             <div 
               key={notif.id}
               onClick={() => markAsRead(notif.id)}
-              className="bg-white p-5 rounded-[2rem] border border-brand-navy/5 flex items-center justify-between shadow-sm cursor-pointer hover:bg-brand-bg transition-colors"
+              className="glass-card p-5 rounded-[2rem] flex items-center justify-between cursor-pointer hover:shadow-md transition-all"
             >
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl overflow-hidden border border-brand-navy/5 relative">
                   <img src={notif.fromPhoto} alt="" className="w-full h-full object-cover" />
                   <div className="absolute -bottom-1 -right-1 bg-brand-gold p-1 rounded-lg border-2 border-white">
-                    {notif.type === 'friend_request' ? <UserPlus size={10} className="text-brand-navy" /> : <Bell size={10} className="text-brand-navy" />}
+                    {notif.type === 'follow' ? <UserPlus size={10} className="text-brand-navy" /> : <Bell size={10} className="text-brand-navy" />}
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm line-clamp-2"><span className="font-bold">{notif.fromName}</span> {notif.type === 'friend_request' ? 'sent you a friend request!' : notif.message}</p>
+                  <p className="text-sm line-clamp-2"><span className="font-bold">{notif.fromName}</span> {notif.type === 'follow' ? 'started following you!' : notif.message}</p>
                   <p className="text-[10px] text-brand-navy/40 font-bold uppercase tracking-widest mt-1">
                     {notif.createdAt ? format(notif.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}
                   </p>
@@ -2816,7 +2763,7 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
                 {showName && !isMe && <span className="text-[10px] font-bold text-brand-navy/40 mb-1 ml-2">{msg.senderName}</span>}
                 <div className={cn(
                   "max-w-[80%] p-4 rounded-3xl text-sm shadow-sm",
-                  isMe ? "bg-brand-navy text-white rounded-tr-none" : "bg-white text-brand-navy rounded-tl-none border border-brand-navy/5"
+                  isMe ? "bg-brand-navy text-white rounded-tr-none" : "glass-card text-brand-navy rounded-tl-none"
                 )}>
                   {msg.text}
                 </div>
@@ -2868,7 +2815,7 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
         })}
 
         {chats.length === 0 && (
-          <div className="bg-white p-10 rounded-[2.5rem] border-2 border-dashed border-brand-navy/5 text-center">
+          <div className="glass-card p-10 rounded-[2.5rem] border-2 border-dashed border-brand-rose/40 text-center">
             <div className="w-16 h-16 bg-brand-bg rounded-full flex items-center justify-center mx-auto mb-4">
               <MessageCircle className="w-8 h-8 text-brand-navy/20" />
             </div>
@@ -2915,11 +2862,12 @@ function ChatListItem({ chat, currentUser, onClick }: { chat: Chat, currentUser:
   );
 }
 
-function CommunityScreen({ onViewUser }: { onViewUser: (u: UserProfile) => void, key?: React.Key }) {
-  const [activeSubTab, setActiveSubTab] = useState<'leaderboard' | 'friends' | 'discover'>('leaderboard');
+function CommunityScreen({ onViewUser, currentUser }: { onViewUser: (u: UserProfile) => void, currentUser: FirebaseUser, key?: React.Key }) {
+  const [activeSubTab, setActiveSubTab] = useState<'leaderboard' | 'discover'>('leaderboard');
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [followingUids, setFollowingUids] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const q = query(collection(db, 'users'), orderBy('totalStamps', 'desc'), limit(20));
@@ -2933,15 +2881,35 @@ function CommunityScreen({ onViewUser }: { onViewUser: (u: UserProfile) => void,
     return unsubscribe;
   }, []);
 
-  const filteredUsers = users.filter(u => (u.name || '').toLowerCase().includes(search.toLowerCase()));
+  useEffect(() => {
+    const q = query(collection(db, 'follows'), where('followerUid', '==', currentUser.uid));
+    return onSnapshot(q, (snap) => {
+      setFollowingUids(new Set(snap.docs.map(d => d.data().followingUid as string)));
+    });
+  }, [currentUser.uid]);
+
+  const handleToggleFollow = async (targetUid: string) => {
+    const followId = `${currentUser.uid}_${targetUid}`;
+    if (followingUids.has(targetUid)) {
+      await deleteDoc(doc(db, 'follows', followId));
+    } else {
+      await setDoc(doc(db, 'follows', followId), {
+        followerUid: currentUser.uid,
+        followingUid: targetUid,
+        createdAt: serverTimestamp()
+      });
+    }
+  };
+
+  const filteredUsers = users.filter(u => u.uid !== currentUser.uid && (u.name || '').toLowerCase().includes(search.toLowerCase()));
 
   return (
     <div className="space-y-6">
       <header>
         <h2 className="font-display text-3xl font-bold mb-4">Community</h2>
         <div className="flex gap-2 bg-white p-1 rounded-2xl border border-brand-navy/5">
-          {(['leaderboard', 'friends', 'discover'] as const).map(tab => (
-            <button 
+          {(['leaderboard', 'discover'] as const).map(tab => (
+            <button
               key={tab}
               onClick={() => setActiveSubTab(tab)}
               className={cn(
@@ -2986,7 +2954,7 @@ function CommunityScreen({ onViewUser }: { onViewUser: (u: UserProfile) => void,
                   <div 
                     key={`leaderboard-${u.uid}`} 
                     onClick={() => onViewUser(u)}
-                    className="bg-white p-4 rounded-2xl flex items-center gap-4 border border-brand-navy/5 hover:border-brand-gold/20 transition-all cursor-pointer"
+                    className="glass-card p-4 rounded-2xl flex items-center gap-4 hover:shadow-md transition-all cursor-pointer"
                   >
                     <div className="w-8 font-display font-bold text-brand-navy/20">#{i + 1}</div>
                     <div className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5">
@@ -3009,32 +2977,43 @@ function CommunityScreen({ onViewUser }: { onViewUser: (u: UserProfile) => void,
             </div>
           )}
 
-          {(activeSubTab === 'friends' || activeSubTab === 'discover') && (
+          {activeSubTab === 'discover' && (
             <div className="space-y-4">
               <div className="relative">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-brand-navy/40" />
-                <input 
+                <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Search users..." 
+                  placeholder="Search users..."
                   className="w-full pl-10 pr-4 py-3 rounded-xl bg-white border border-brand-navy/5 text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/20"
                 />
               </div>
               <div className="space-y-2">
-                {filteredUsers.map(u => (
-                  <div key={u.uid} className="bg-white p-4 rounded-2xl flex items-center gap-4 border border-brand-navy/5">
-                    <div className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 cursor-pointer" onClick={() => onViewUser(u)}>
-                      <img src={u.photoURL} alt="" className="w-full h-full object-cover" />
+                {filteredUsers.map(u => {
+                  const isFollowing = followingUids.has(u.uid);
+                  return (
+                    <div key={u.uid} className="glass-card p-4 rounded-2xl flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 cursor-pointer" onClick={() => onViewUser(u)}>
+                        <img src={u.photoURL} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 cursor-pointer" onClick={() => onViewUser(u)}>
+                        <p className="font-bold text-sm">{u.name}</p>
+                        <p className="text-xs text-brand-navy/40">{u.role}</p>
+                      </div>
+                      <button
+                        onClick={() => handleToggleFollow(u.uid)}
+                        className={cn(
+                          "px-4 py-2 rounded-xl text-xs font-bold transition-all",
+                          isFollowing
+                            ? "bg-brand-navy/10 text-brand-navy/60 hover:bg-red-50 hover:text-red-400"
+                            : "bg-brand-gold text-brand-navy hover:bg-brand-gold/80"
+                        )}
+                      >
+                        {isFollowing ? 'Following' : 'Follow'}
+                      </button>
                     </div>
-                    <div className="flex-1 cursor-pointer" onClick={() => onViewUser(u)}>
-                      <p className="font-bold text-sm">{u.name}</p>
-                      <p className="text-xs text-brand-navy/40">{u.role}</p>
-                    </div>
-                    <button className="p-2 rounded-xl bg-brand-bg text-brand-navy/60 hover:bg-brand-navy hover:text-white transition-all">
-                      <UserPlus size={18} />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
@@ -3154,7 +3133,7 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser }: { store:
       {card ? (
         <LoyaltyCard card={card} store={store} />
       ) : (
-        <div className="bg-white p-8 rounded-[2.5rem] border border-brand-navy/5 text-center space-y-4">
+        <div className="glass-card p-8 rounded-[2.5rem] text-center space-y-4">
           <div className="w-16 h-16 bg-brand-bg rounded-full flex items-center justify-center mx-auto">
             <Sparkles className="w-8 h-8 text-brand-gold" />
           </div>
@@ -3171,12 +3150,12 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser }: { store:
         </div>
       )}
 
-      <div className="bg-white p-6 rounded-[2.5rem] border border-brand-navy/5">
+      <div className="glass-card p-6 rounded-[2.5rem]">
         <h3 className="font-bold mb-2">About</h3>
         <p className="text-sm text-brand-navy/60 leading-relaxed">{store.description}</p>
       </div>
 
-      <div className="bg-white p-6 rounded-[2.5rem] border border-brand-navy/5 space-y-4">
+      <div className="glass-card p-6 rounded-[2.5rem] space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="font-bold">Top Collectors</h3>
           <Trophy size={18} className="text-brand-gold" />
@@ -3220,7 +3199,7 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser }: { store:
       <div className="space-y-4">
         <h3 className="font-display text-2xl font-bold">Community Feed</h3>
         
-        <div className="bg-white p-4 rounded-3xl border border-brand-navy/5 space-y-4">
+        <div className="glass-card p-4 rounded-3xl space-y-4">
           <textarea 
             value={newPost}
             onChange={(e) => setNewPost(e.target.value)}
@@ -3241,7 +3220,7 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser }: { store:
 
         <div className="space-y-4">
           {posts.map(post => (
-            <div key={post.id} className="bg-white p-6 rounded-[2.5rem] border border-brand-navy/5 space-y-4 shadow-sm">
+            <div key={post.id} className="glass-card p-6 rounded-[2.5rem] space-y-4">
               <div className="flex items-center gap-3">
                 <div 
                   className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 cursor-pointer"
@@ -3303,7 +3282,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
   const [newReview, setNewReview] = useState('');
   const [rating, setRating] = useState(5);
   const [isPosting, setIsPosting] = useState(false);
-  const [friendStatus, setFriendStatus] = useState<'none' | 'pending' | 'friends'>('none');
+  const [isFollowing, setIsFollowing] = useState(false);
 
   useEffect(() => {
     // Listen to target user profile for real-time stamp updates
@@ -3341,36 +3320,10 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
       setReviews(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    // Friendship listener
-    const friendshipId = [currentUser.uid, initialTargetUser.uid].sort().join('_');
-    const unsubFriendship = onSnapshot(doc(db, 'friendships', friendshipId), (snap) => {
-      if (snap.exists()) {
-        setFriendStatus('friends');
-      } else {
-        // Check for outgoing pending request
-        const rqOut = query(collection(db, 'friend_requests'), 
-          where('fromUid', '==', currentUser.uid), 
-          where('toUid', '==', initialTargetUser.uid), 
-          where('status', '==', 'pending')
-        );
-        const unsubOut = onSnapshot(rqOut, (snapOut) => {
-          if (!snapOut.empty) {
-            setFriendStatus('pending');
-          } else {
-            // Check for incoming pending request
-            const rqIn = query(collection(db, 'friend_requests'), 
-              where('fromUid', '==', initialTargetUser.uid), 
-              where('toUid', '==', currentUser.uid), 
-              where('status', '==', 'pending')
-            );
-            onSnapshot(rqIn, (snapIn) => {
-              if (!snapIn.empty) setFriendStatus('pending');
-              else setFriendStatus('none');
-            });
-          }
-        });
-        return () => unsubOut();
-      }
+    // Follow listener
+    const followId = `${currentUser.uid}_${initialTargetUser.uid}`;
+    const unsubFollow = onSnapshot(doc(db, 'follows', followId), (snap) => {
+      setIsFollowing(snap.exists());
     });
 
     let unsubStore = () => {};
@@ -3390,7 +3343,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
       unsubStore();
       unsubHistory();
       unsubReviews();
-      unsubFriendship();
+      unsubFollow();
     };
   }, [initialTargetUser.uid, initialTargetUser.role, currentUser.uid]);
 
@@ -3411,29 +3364,30 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
     if (onMessage) onMessage(chatId);
   };
 
-  const handleFriendClick = async () => {
-    if (friendStatus !== 'none') return;
+  const handleFollowClick = async () => {
+    const followId = `${currentUser.uid}_${targetUser.uid}`;
     try {
-      await addDoc(collection(db, 'friend_requests'), {
-        fromUid: currentUser.uid,
-        fromName: currentProfile?.name || currentUser.displayName || 'Anonymous',
-        fromPhoto: currentProfile?.photoURL || currentUser.photoURL || '',
-        toUid: targetUser.uid,
-        status: 'pending',
-        createdAt: serverTimestamp()
-      });
-      await addDoc(collection(db, 'notifications'), {
-        toUid: targetUser.uid,
-        fromUid: currentUser.uid,
-        fromName: currentProfile?.name || currentUser.displayName || 'Anonymous',
-        fromPhoto: currentProfile?.photoURL || currentUser.photoURL || '',
-        type: 'friend_request',
-        message: `${currentProfile?.name || 'Someone'} sent you a friend request!`,
-        isRead: false,
-        createdAt: serverTimestamp()
-      });
+      if (isFollowing) {
+        await deleteDoc(doc(db, 'follows', followId));
+      } else {
+        await setDoc(doc(db, 'follows', followId), {
+          followerUid: currentUser.uid,
+          followingUid: targetUser.uid,
+          createdAt: serverTimestamp()
+        });
+        await addDoc(collection(db, 'notifications'), {
+          toUid: targetUser.uid,
+          fromUid: currentUser.uid,
+          fromName: currentProfile?.name || currentUser.displayName || 'Anonymous',
+          fromPhoto: currentProfile?.photoURL || currentUser.photoURL || '',
+          type: 'follow',
+          message: `${currentProfile?.name || 'Someone'} started following you!`,
+          isRead: false,
+          createdAt: serverTimestamp()
+        });
+      }
     } catch (err) {
-      console.error("Friend request error:", err);
+      console.error("Follow error:", err);
     }
   };
 
@@ -3471,7 +3425,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
         Back
       </button>
 
-      <div className="bg-white p-8 rounded-[3rem] border border-brand-navy/5 text-center relative overflow-hidden shadow-sm">
+      <div className="glass-card p-8 rounded-[3rem] text-center relative overflow-hidden">
         <div className="absolute top-0 left-0 right-0 h-24 bg-brand-gold/10" />
         <div className="relative z-10">
           <div className="w-24 h-24 rounded-[2.5rem] border-4 border-white overflow-hidden mx-auto mb-4 shadow-xl">
@@ -3482,32 +3436,24 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
           
           {currentUser && currentUser.uid !== targetUser.uid && (
             <div className="flex justify-center gap-2 mb-6">
-              <button 
-                onClick={handleFriendClick}
-                disabled={friendStatus === 'pending' || friendStatus === 'friends'}
+              <button
+                onClick={handleFollowClick}
                 className={cn(
-                  "flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all shadow-lg",
-                  friendStatus === 'friends' 
-                    ? "bg-green-500 text-white" 
-                    : friendStatus === 'pending'
-                    ? "bg-brand-navy/10 text-brand-navy/40 cursor-default"
-                    : "bg-brand-gold text-brand-navy active:scale-95 hover:bg-brand-gold/80"
+                  "flex-1 flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-bold text-sm transition-all shadow-lg active:scale-95",
+                  isFollowing
+                    ? "bg-brand-navy/10 text-brand-navy/60 hover:bg-red-50 hover:text-red-400"
+                    : "bg-brand-gold text-brand-navy hover:bg-brand-gold/80"
                 )}
               >
-                {friendStatus === 'friends' ? (
+                {isFollowing ? (
                   <>
                     <UserCheck size={18} />
-                    Friends
-                  </>
-                ) : friendStatus === 'pending' ? (
-                  <>
-                    <Clock size={18} />
-                    Requested
+                    Following
                   </>
                 ) : (
                   <>
                     <UserPlus size={18} />
-                    Add Friend
+                    Follow
                   </>
                 )}
               </button>
@@ -3572,7 +3518,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
               <div 
                 key={card.id} 
                 onClick={() => onViewStore(store)}
-                className="bg-white p-4 rounded-2xl border border-brand-navy/5 flex items-center justify-between shadow-sm cursor-pointer hover:border-brand-gold/30 hover:shadow-md transition-all group"
+                className="glass-card p-4 rounded-2xl flex items-center justify-between cursor-pointer hover:shadow-md transition-all group"
               >
                 <div className="flex items-center gap-3 overflow-hidden">
                   <div className="w-10 h-10 rounded-xl overflow-hidden shadow-sm shrink-0">
@@ -3602,7 +3548,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
       <div className="space-y-4">
         <h3 className="font-display text-xl font-bold px-2">Wall & Shoutouts</h3>
         {targetUser.uid !== currentUser.uid && (
-          <div className="bg-white p-6 rounded-[2.5rem] border border-brand-navy/5 space-y-4 shadow-sm">
+          <div className="glass-card p-6 rounded-[2.5rem] space-y-4">
             <div className="flex gap-2 mb-2">
               {[1, 2, 3, 4, 5].map(star => (
                 <button key={star} onClick={() => setRating(star)}>

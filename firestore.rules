@@ -99,17 +99,10 @@ service cloud.firestore {
       }
     }
 
-    match /friend_requests/{requestId} {
-      allow read: if isAuthenticated() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid || isAdmin());
-      allow create: if isAuthenticated() && (request.resource.data.fromUid == request.auth.uid || isAdmin());
-      allow update: if isAuthenticated() && (resource.data.toUid == request.auth.uid || resource.data.fromUid == request.auth.uid || isAdmin());
-      allow delete: if isAuthenticated() && (resource.data.fromUid == request.auth.uid || resource.data.toUid == request.auth.uid || isAdmin());
-    }
-
-    match /friendships/{friendshipId} {
-      allow read: if isAuthenticated() && (request.auth.uid in resource.data.uids || isAdmin());
-      allow create: if isAuthenticated() && (request.auth.uid in request.resource.data.uids || isAdmin());
-      allow delete: if isAuthenticated() && (request.auth.uid in resource.data.uids || isAdmin());
+    match /follows/{followId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (request.resource.data.followerUid == request.auth.uid || isAdmin());
+      allow delete: if isAuthenticated() && (resource.data.followerUid == request.auth.uid || isAdmin());
     }
 
     match /notifications/{notificationId} {
