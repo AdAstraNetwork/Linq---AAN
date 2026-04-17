@@ -11,11 +11,11 @@ import {
   signOut,
   User as FirebaseUser
 } from 'firebase/auth';
-import { 
-  collection, 
-  doc, 
-  getDoc, 
-  setDoc, 
+import {
+  collection,
+  doc,
+  getDoc,
+  setDoc,
   onSnapshot,
   query,
   where,
@@ -27,18 +27,20 @@ import {
   addDoc,
   orderBy,
   limit,
-  collectionGroup
+  collectionGroup,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { cn } from './lib/utils';
-import { 
-  Sparkles, 
-  User as UserIcon, 
-  Store, 
-  LogOut, 
-  Plus, 
-  CheckCircle2, 
-  Gift, 
+import {
+  Sparkles,
+  User as UserIcon,
+  Store,
+  LogOut,
+  Plus,
+  CheckCircle2,
+  Gift,
   ChevronRight,
   Search,
   MapPin,
@@ -67,7 +69,9 @@ import {
   UserCheck,
   ArrowLeft,
   MoreVertical,
-  Trash2
+  Trash2,
+  BarChart2,
+  Image
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
@@ -226,6 +230,23 @@ interface Comment {
   createdAt: any;
 }
 
+interface GlobalPost {
+  id: string;
+  authorUid: string;
+  authorName: string;
+  authorPhoto: string;
+  authorRole: 'consumer' | 'vendor';
+  storeId?: string;
+  storeName?: string;
+  content: string;
+  postType: 'post' | 'poll';
+  pollOptions?: { text: string }[];
+  pollVotes?: { [key: string]: string[] };
+  createdAt: any;
+  likesCount: number;
+  likedBy?: string[];
+}
+
 // --- Main App Component ---
 
 export default function App() {
@@ -238,6 +259,7 @@ export default function App() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [userCards, setUserCards] = useState<Card[]>([]);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCreatePost, setShowCreatePost] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
 
   // Listen to user's cards globally to sync stats
@@ -356,25 +378,28 @@ export default function App() {
   return (
     <div className="min-h-screen pb-24 max-w-md mx-auto shadow-xl shadow-black/5 relative overflow-hidden bg-white">
       {/* Header */}
-      <header className="glass-panel sticky top-0 z-50 px-6 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 gradient-red rounded-lg flex items-center justify-center">
-            <Sparkles className="w-5 h-5 text-white" />
+      <header className="glass-panel sticky top-0 z-50 px-5 py-3.5 flex items-center justify-between">
+        <button
+          onClick={() => setShowCreatePost(true)}
+          className="w-9 h-9 gradient-red rounded-xl flex items-center justify-center shadow-md shadow-red-500/20 active:scale-95 transition-transform"
+        >
+          <Plus className="w-5 h-5 text-white" />
+        </button>
+        <button onClick={() => setShowSettings(true)} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+          <div className="w-7 h-7 gradient-red rounded-lg flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-white" />
           </div>
           <h1 className="font-display font-bold text-xl tracking-tight"><span className="text-brand-gold">Li</span>nq</h1>
-        </div>
-        <div className="flex items-center gap-4">
-          <button className="relative p-2 text-brand-navy/60 hover:text-brand-navy transition-colors">
-            <Bell className="w-6 h-6" />
-            <span className="absolute top-2 right-2 w-2 h-2 bg-brand-gold rounded-full border-2 border-white" />
-          </button>
-          <button 
-            onClick={() => setShowSettings(true)}
-            className="p-2 text-brand-navy/60 hover:text-brand-navy transition-colors"
-          >
-            <Settings className="w-6 h-6" />
-          </button>
-        </div>
+        </button>
+        <button
+          onClick={() => { setActiveTab('for-you'); setViewingStore(null); setViewingUser(null); }}
+          className="relative w-9 h-9 flex items-center justify-center text-brand-navy/60 hover:text-brand-navy transition-colors"
+        >
+          <Bell className="w-6 h-6" />
+          {notifications.length > 0 && (
+            <span className="absolute top-1 right-1 w-2 h-2 bg-brand-gold rounded-full border-2 border-white" />
+          )}
+        </button>
       </header>
 
       {/* Main Content */}
@@ -439,12 +464,23 @@ export default function App() {
       {/* Settings Menu */}
       <AnimatePresence>
         {showSettings && (
-          <SettingsMenu 
-            isOpen={showSettings} 
-            onClose={() => setShowSettings(false)} 
-            profile={profile} 
+          <SettingsMenu
+            isOpen={showSettings}
+            onClose={() => setShowSettings(false)}
+            profile={profile}
             userCards={userCards}
             onLogout={handleLogout}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Create Post Modal */}
+      <AnimatePresence>
+        {showCreatePost && user && (
+          <CreatePostModal
+            onClose={() => setShowCreatePost(false)}
+            user={user}
+            profile={profile}
           />
         )}
       </AnimatePresence>
@@ -597,7 +633,7 @@ function ConsumerApp({ activeTab, setActiveTab, profile, user, onViewStore, onVi
       exit={{ opacity: 0, x: -20 }}
     >
       {activeTab === 'for-you' && (
-        <ForYouScreen onViewUser={onViewUser} onViewStore={onViewStore} notifications={notifications} />
+        <ForYouScreen onViewUser={onViewUser} onViewStore={onViewStore} notifications={notifications} currentUser={user} currentProfile={profile} />
       )}
 
       {activeTab === 'messages' && (
@@ -853,7 +889,7 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
       exit={{ opacity: 0, x: -20 }}
     >
       {activeTab === 'for-you' && (
-        <ForYouScreen onViewUser={onViewUser} notifications={notifications} />
+        <ForYouScreen onViewUser={onViewUser} notifications={notifications} currentUser={user} currentProfile={profile} />
       )}
 
       {activeTab === 'messages' && (
@@ -1809,22 +1845,17 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
   useEffect(() => {
     if (!profile?.uid) return;
 
-    const fetchUsers = async (uids: string[]) => {
+    const fetchUsersByIds = async (uids: string[]): Promise<UserProfile[]> => {
       if (uids.length === 0) return [];
-      const results: UserProfile[] = [];
-      for (let i = 0; i < uids.length; i += 30) {
-        const batch = uids.slice(i, i + 30);
-        const snap = await getDocs(query(collection(db, 'users'), where('uid', 'in', batch)));
-        results.push(...snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile)));
-      }
-      return results;
+      const snaps = await Promise.all(uids.map(uid => getDoc(doc(db, 'users', uid))));
+      return snaps.filter(s => s.exists()).map(s => ({ uid: s.id, ...s.data() } as UserProfile));
     };
 
     const unsubFollowing = onSnapshot(
       query(collection(db, 'follows'), where('followerUid', '==', profile.uid)),
       async (snap) => {
         const uids = snap.docs.map(d => d.data().followingUid as string);
-        setFollowing(await fetchUsers(uids));
+        setFollowing(await fetchUsersByIds(uids));
       }
     );
 
@@ -1832,7 +1863,7 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
       query(collection(db, 'follows'), where('followingUid', '==', profile.uid)),
       async (snap) => {
         const uids = snap.docs.map(d => d.data().followerUid as string);
-        setFollowers(await fetchUsers(uids));
+        setFollowers(await fetchUsersByIds(uids));
       }
     );
 
@@ -2441,73 +2472,267 @@ function ProfileLink({ icon, label, onClick }: { icon: React.ReactNode, label: s
 
 // --- Social & Community Components ---
 
-function ForYouScreen({ onViewUser, onViewStore, notifications }: { onViewUser: (u: UserProfile) => void, onViewStore?: (s: StoreProfile) => void, notifications: Notification[] }) {
-  const [feed, setFeed] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'feed' | 'notifications'>('feed');
+function CreatePostModal({ onClose, user, profile }: { onClose: () => void, user: FirebaseUser, profile: UserProfile | null }) {
+  const [content, setContent] = useState('');
+  const [isPoll, setIsPoll] = useState(false);
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [isPosting, setIsPosting] = useState(false);
+  const [vendorStore, setVendorStore] = useState<StoreProfile | null>(null);
 
   useEffect(() => {
-    const postsQuery = query(collectionGroup(db, 'posts'), orderBy('createdAt', 'desc'), limit(15));
-    const reviewsQuery = query(collection(db, 'user_reviews'), orderBy('createdAt', 'desc'), limit(15));
-
-    const unsubPosts = onSnapshot(postsQuery, (snap) => {
-      const posts = snap.docs.map(d => ({ id: d.id, type: 'post', ...d.data() }));
-      updateFeed(posts, 'post');
-    }, (err) => console.error("ForYou posts:", err));
-
-    const unsubReviews = onSnapshot(reviewsQuery, (snap) => {
-      const reviews = snap.docs.map(d => ({ id: d.id, type: 'review', ...d.data() }));
-      updateFeed(reviews, 'review');
-    }, (err) => console.error("ForYou reviews:", err));
-
-    const updateFeed = (items: any[], type: string) => {
-      setFeed(prev => {
-        const otherItems = prev.filter(i => i.type !== type);
-        const newFeed = [...otherItems, ...items].sort((a, b) => {
-          const timeA = a.createdAt?.toMillis() || 0;
-          const timeB = b.createdAt?.toMillis() || 0;
-          return timeB - timeA;
-        });
-        return newFeed.slice(0, 30);
+    if (profile?.role === 'vendor') {
+      const q = query(collection(db, 'stores'), where('ownerUid', '==', user.uid), limit(1));
+      getDocs(q).then(snap => {
+        if (!snap.empty) setVendorStore({ id: snap.docs[0].id, ...snap.docs[0].data() } as StoreProfile);
       });
-      setLoading(false);
-    };
+    }
+  }, [profile?.role, user.uid]);
 
-    return () => {
-      unsubPosts();
-      unsubReviews();
-    };
+  const handleAddOption = () => setPollOptions(prev => [...prev, '']);
+  const handleOptionChange = (i: number, val: string) => {
+    setPollOptions(prev => prev.map((o, idx) => idx === i ? val : o));
+  };
+  const handleRemoveOption = (i: number) => {
+    if (pollOptions.length <= 2) return;
+    setPollOptions(prev => prev.filter((_, idx) => idx !== i));
+  };
+
+  const handleSubmit = async () => {
+    if (!content.trim() && !isPoll) return;
+    if (isPoll && pollOptions.filter(o => o.trim()).length < 2) return;
+    setIsPosting(true);
+    try {
+      const initialVotes: { [key: string]: string[] } = {};
+      const options = pollOptions.filter(o => o.trim()).map(text => ({ text }));
+      options.forEach((_, i) => { initialVotes[String(i)] = []; });
+
+      await addDoc(collection(db, 'global_posts'), {
+        authorUid: user.uid,
+        authorName: profile?.name || user.displayName || 'User',
+        authorPhoto: profile?.photoURL || user.photoURL || '',
+        authorRole: profile?.role || 'consumer',
+        storeId: vendorStore?.id || null,
+        storeName: vendorStore?.name || null,
+        content: content.trim(),
+        postType: isPoll ? 'poll' : 'post',
+        pollOptions: isPoll ? options : null,
+        pollVotes: isPoll ? initialVotes : null,
+        createdAt: serverTimestamp(),
+        likesCount: 0,
+        likedBy: []
+      });
+      onClose();
+    } catch (err) {
+      console.error("Create post error:", err);
+    } finally {
+      setIsPosting(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] flex items-end justify-center"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <motion.div
+        initial={{ y: '100%' }}
+        animate={{ y: 0 }}
+        exit={{ y: '100%' }}
+        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+        onClick={e => e.stopPropagation()}
+        className="relative w-full max-w-md bg-white rounded-t-[2.5rem] p-6 pb-10 space-y-5 shadow-2xl"
+      >
+        {/* Handle */}
+        <div className="w-10 h-1 bg-brand-navy/10 rounded-full mx-auto" />
+
+        <div className="flex items-center justify-between">
+          <h3 className="font-display font-bold text-lg">New Post</h3>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsPoll(p => !p)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all",
+                isPoll ? "bg-brand-gold text-white shadow-md" : "bg-brand-navy/5 text-brand-navy/50 hover:bg-brand-navy/10"
+              )}
+            >
+              <BarChart2 size={14} />
+              Poll
+            </button>
+            <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-xl bg-brand-navy/5 text-brand-navy/40">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 border border-brand-navy/10">
+            <img src={profile?.photoURL || user.photoURL || ''} alt="" className="w-full h-full object-cover" />
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 mb-1">
+              <p className="font-bold text-sm">{profile?.name || user.displayName}</p>
+              {profile?.role === 'vendor' && vendorStore && (
+                <span className="text-[10px] text-brand-navy/40">• {vendorStore.name}</span>
+              )}
+            </div>
+            <textarea
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              placeholder={isPoll ? "Ask a question..." : "What's on your mind?"}
+              rows={3}
+              className="w-full text-sm resize-none bg-transparent border-none outline-none text-brand-navy placeholder:text-brand-navy/30 leading-relaxed"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        {isPoll && (
+          <div className="space-y-2 ml-13 pl-[52px]">
+            {pollOptions.map((opt, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <div className="flex-1 flex items-center gap-2 bg-brand-bg rounded-xl px-4 py-2.5 border border-brand-navy/8">
+                  <span className="w-5 h-5 rounded-full border-2 border-brand-navy/20 flex items-center justify-center shrink-0">
+                    <span className="text-[9px] font-bold text-brand-navy/40">{i + 1}</span>
+                  </span>
+                  <input
+                    value={opt}
+                    onChange={e => handleOptionChange(i, e.target.value)}
+                    placeholder={`Option ${i + 1}`}
+                    className="flex-1 bg-transparent text-sm outline-none placeholder:text-brand-navy/30"
+                  />
+                </div>
+                {pollOptions.length > 2 && (
+                  <button onClick={() => handleRemoveOption(i)} className="text-brand-navy/20 hover:text-red-400 transition-colors">
+                    <X size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+            {pollOptions.length < 5 && (
+              <button
+                onClick={handleAddOption}
+                className="flex items-center gap-2 text-brand-gold text-xs font-bold hover:opacity-80 transition-opacity"
+              >
+                <Plus size={14} />
+                Add option
+              </button>
+            )}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-3 pt-2 border-t border-brand-navy/5">
+          <button
+            onClick={handleSubmit}
+            disabled={isPosting || (!content.trim() && !isPoll) || (isPoll && pollOptions.filter(o => o.trim()).length < 2)}
+            className="px-6 py-2.5 gradient-red text-white rounded-xl font-bold text-sm disabled:opacity-40 transition-all active:scale-95 shadow-md shadow-red-500/20"
+          >
+            {isPosting ? 'Posting...' : 'Post'}
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function ForYouScreen({ onViewUser, onViewStore, notifications, currentUser, currentProfile }: { onViewUser: (u: UserProfile) => void, onViewStore?: (s: StoreProfile) => void, notifications: Notification[], currentUser?: FirebaseUser, currentProfile?: UserProfile | null }) {
+  const [globalPosts, setGlobalPosts] = useState<GlobalPost[]>([]);
+  const [vendorPosts, setVendorPosts] = useState<any[]>([]);
+  const [followingUids, setFollowingUids] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
+  const [activeSubTab, setActiveSubTab] = useState<'all' | 'following' | 'notifications'>('all');
+
+  useEffect(() => {
+    const unsubGlobal = onSnapshot(
+      query(collection(db, 'global_posts'), orderBy('createdAt', 'desc'), limit(40)),
+      (snap) => {
+        setGlobalPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost)));
+        setLoading(false);
+      },
+      (err) => { console.error("global_posts:", err); setLoading(false); }
+    );
+    const unsubVendor = onSnapshot(
+      query(collectionGroup(db, 'posts'), orderBy('createdAt', 'desc'), limit(20)),
+      (snap) => setVendorPosts(snap.docs.map(d => ({ id: d.id, _type: 'vendor', ...d.data() }))),
+      (err) => console.error("vendor posts:", err)
+    );
+    return () => { unsubGlobal(); unsubVendor(); };
   }, []);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const q = query(collection(db, 'follows'), where('followerUid', '==', currentUser.uid));
+    return onSnapshot(q, (snap) => {
+      setFollowingUids(new Set(snap.docs.map(d => d.data().followingUid as string)));
+    });
+  }, [currentUser?.uid]);
 
   const markAsRead = async (id: string) => {
     await updateDoc(doc(db, 'notifications', id), { isRead: true });
   };
 
-  return (
-    <div className="space-y-6 pb-20">
-      <header>
-        <h2 className="font-display text-3xl font-bold mb-1">For You</h2>
-        <p className="text-brand-navy/60 text-sm">Latest updates from your community.</p>
-      </header>
+  const handleLike = async (post: GlobalPost) => {
+    if (!currentUser) return;
+    const ref = doc(db, 'global_posts', post.id);
+    const alreadyLiked = (post.likedBy || []).includes(currentUser.uid);
+    await updateDoc(ref, {
+      likedBy: alreadyLiked ? arrayRemove(currentUser.uid) : arrayUnion(currentUser.uid),
+      likesCount: alreadyLiked ? Math.max(0, post.likesCount - 1) : post.likesCount + 1
+    });
+  };
 
+  const handleVote = async (post: GlobalPost, optionIndex: number) => {
+    if (!currentUser) return;
+    const ref = doc(db, 'global_posts', post.id);
+    const votes = post.pollVotes || {};
+    const currentVoteKey = Object.keys(votes).find(k => (votes[k] || []).includes(currentUser.uid));
+    const updates: any = {};
+    if (currentVoteKey !== undefined) {
+      updates[`pollVotes.${currentVoteKey}`] = arrayRemove(currentUser.uid);
+    }
+    if (currentVoteKey !== String(optionIndex)) {
+      updates[`pollVotes.${optionIndex}`] = arrayUnion(currentUser.uid);
+    }
+    if (Object.keys(updates).length > 0) await updateDoc(ref, updates);
+  };
+
+  const sortedFeed = [...globalPosts, ...vendorPosts].sort((a, b) => {
+    const tA = a.createdAt?.toMillis?.() || 0;
+    const tB = b.createdAt?.toMillis?.() || 0;
+    return tB - tA;
+  });
+
+  const followingFeed = sortedFeed.filter(p => {
+    const uid = p.authorUid || p._authorUid;
+    return uid && followingUids.has(uid);
+  });
+
+  const displayFeed = activeSubTab === 'following' ? followingFeed : sortedFeed;
+
+  return (
+    <div className="space-y-5 pb-20">
       <div className="flex p-1 glass-card rounded-2xl">
-        <button 
-          onClick={() => setActiveSubTab('feed')}
-          className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2", activeSubTab === 'feed' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}
-        >
-          <Zap size={14} />
-          Feed
-        </button>
-        <button 
-          onClick={() => setActiveSubTab('notifications')}
-          className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative", activeSubTab === 'notifications' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}
-        >
-          <Bell size={14} />
-          Notifications
-          {notifications.length > 0 && (
-            <span className="w-1.5 h-1.5 bg-red-500 rounded-full animate-pulse" />
-          )}
-        </button>
+        {(['all', 'following', 'notifications'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveSubTab(tab)}
+            className={cn(
+              "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 relative",
+              activeSubTab === tab ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40"
+            )}
+          >
+            {tab === 'all' && <Zap size={13} />}
+            {tab === 'following' && <Users size={13} />}
+            {tab === 'notifications' && <Bell size={13} />}
+            {tab === 'all' ? 'All' : tab === 'following' ? 'Following' : 'Alerts'}
+            {tab === 'notifications' && notifications.length > 0 && (
+              <span className="w-1.5 h-1.5 bg-brand-gold rounded-full animate-pulse" />
+            )}
+          </button>
+        ))}
       </div>
 
       {loading ? (
@@ -2516,100 +2741,10 @@ function ForYouScreen({ onViewUser, onViewStore, notifications }: { onViewUser: 
             <Sparkles className="w-8 h-8 text-brand-gold" />
           </motion.div>
         </div>
-      ) : activeSubTab === 'feed' ? (
-        <div className="space-y-4">
-          {feed.map(item => (
-            <motion.div 
-              key={`${item.type}-${item.id}`}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="glass-card p-6 rounded-[2.5rem] space-y-4"
-            >
-              {item.type === 'post' ? (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 cursor-pointer"
-                        onClick={async () => {
-                          const uq = query(collection(db, 'users'), where('uid', '==', item.authorUid));
-                          const usnap = await getDocs(uq);
-                          if (!usnap.empty) {
-                            onViewUser({ uid: usnap.docs[0].id, ...usnap.docs[0].data() } as UserProfile);
-                          }
-                        }}
-                      >
-                        <img src={item.authorPhoto} alt="" className="w-full h-full object-cover" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm">{item.authorName}</p>
-                        <p className="text-[10px] text-brand-navy/40 font-bold uppercase tracking-widest">
-                          {item.createdAt ? format(item.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="px-3 py-1 bg-brand-gold/10 rounded-full">
-                      <span className="text-[10px] font-bold text-brand-gold uppercase tracking-widest">Promotion</span>
-                    </div>
-                  </div>
-                  <p className="text-sm text-brand-navy/80 leading-relaxed">{item.content}</p>
-                  <div className="flex items-center gap-6 pt-2 border-t border-brand-navy/5">
-                    <button className="flex items-center gap-2 text-brand-navy/40 hover:text-red-500 transition-colors">
-                      <Heart size={18} />
-                      <span className="text-xs font-bold">{item.likesCount}</span>
-                    </button>
-                    <button className="flex items-center gap-2 text-brand-navy/40 hover:text-brand-navy transition-colors">
-                      <MessageSquare size={18} />
-                      <span className="text-xs font-bold">Reply</span>
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div 
-                        className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 cursor-pointer"
-                        onClick={async () => {
-                          const uq = query(collection(db, 'users'), where('uid', '==', item.fromUid));
-                          const usnap = await getDocs(uq);
-                          if (!usnap.empty) {
-                            onViewUser({ uid: usnap.docs[0].id, ...usnap.docs[0].data() } as UserProfile);
-                          }
-                        }}
-                      >
-                        <img src={item.fromPhoto} alt="" className="w-full h-full object-cover" />
-                      </div>
-                      <div>
-                        <p className="font-bold text-sm">{item.fromName} <span className="text-brand-navy/40 font-normal">reviewed</span></p>
-                        <p className="text-[10px] text-brand-navy/40 font-bold uppercase tracking-widest">
-                          {item.createdAt ? format(item.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex gap-0.5">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star key={i} size={10} className={cn(i < item.rating ? "text-brand-gold fill-brand-gold" : "text-brand-navy/10")} />
-                      ))}
-                    </div>
-                  </div>
-                  <p className="text-sm text-brand-navy/80 leading-relaxed italic">"{item.content}"</p>
-                </>
-              )}
-            </motion.div>
-          ))}
-          {feed.length === 0 && (
-            <div className="py-20 text-center text-brand-navy/20">
-              <Compass size={64} className="mx-auto mb-4 opacity-10" />
-              <p className="font-bold">Your feed is quiet</p>
-              <p className="text-sm">Follow some stores to see updates!</p>
-            </div>
-          )}
-        </div>
-      ) : (
+      ) : activeSubTab === 'notifications' ? (
         <div className="space-y-3">
           {notifications.map(notif => (
-            <div 
+            <div
               key={notif.id}
               onClick={() => markAsRead(notif.id)}
               className="glass-card p-5 rounded-[2rem] flex items-center justify-between cursor-pointer hover:shadow-md transition-all"
@@ -2618,7 +2753,7 @@ function ForYouScreen({ onViewUser, onViewStore, notifications }: { onViewUser: 
                 <div className="w-12 h-12 rounded-2xl overflow-hidden border border-brand-navy/5 relative">
                   <img src={notif.fromPhoto} alt="" className="w-full h-full object-cover" />
                   <div className="absolute -bottom-1 -right-1 bg-brand-gold p-1 rounded-lg border-2 border-white">
-                    {notif.type === 'follow' ? <UserPlus size={10} className="text-brand-navy" /> : <Bell size={10} className="text-brand-navy" />}
+                    {notif.type === 'follow' ? <UserPlus size={10} className="text-white" /> : <Bell size={10} className="text-white" />}
                   </div>
                 </div>
                 <div>
@@ -2635,7 +2770,127 @@ function ForYouScreen({ onViewUser, onViewStore, notifications }: { onViewUser: 
             <div className="py-20 text-center text-brand-navy/20">
               <Bell size={64} className="mx-auto mb-4 opacity-10" />
               <p className="font-bold">All caught up!</p>
-              <p className="text-sm">No new notifications.</p>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {displayFeed.map((item) => {
+            const isGlobal = !item._type;
+            if (isGlobal) {
+              const post = item as GlobalPost;
+              const isLiked = currentUser ? (post.likedBy || []).includes(currentUser.uid) : false;
+              const totalVotes = post.postType === 'poll'
+                ? Object.values(post.pollVotes || {}).reduce((s, arr) => s + (arr?.length || 0), 0)
+                : 0;
+              const userVoteKey = currentUser
+                ? Object.keys(post.pollVotes || {}).find(k => (post.pollVotes![k] || []).includes(currentUser.uid))
+                : undefined;
+              return (
+                <motion.div key={`gp-${post.id}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card rounded-[2rem] overflow-hidden">
+                  <div className="p-5 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div
+                        className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 cursor-pointer shrink-0"
+                        onClick={async () => {
+                          const snap = await getDoc(doc(db, 'users', post.authorUid));
+                          if (snap.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile);
+                        }}
+                      >
+                        <img src={post.authorPhoto || `https://picsum.photos/seed/${post.authorUid}/40`} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-bold text-sm truncate">{post.authorName}</p>
+                          {post.authorRole === 'vendor' && (
+                            <span className="px-2 py-0.5 bg-brand-gold/10 rounded-full text-[9px] font-bold text-brand-gold uppercase tracking-wide shrink-0">Vendor</span>
+                          )}
+                          {post.storeName && (
+                            <span className="text-[10px] text-brand-navy/40 truncate">• {post.storeName}</span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-brand-navy/40 font-medium">
+                          {post.createdAt ? format(post.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}
+                        </p>
+                      </div>
+                      {post.postType === 'poll' && (
+                        <div className="shrink-0 w-7 h-7 bg-brand-gold/10 rounded-lg flex items-center justify-center">
+                          <BarChart2 size={14} className="text-brand-gold" />
+                        </div>
+                      )}
+                    </div>
+
+                    {post.content && <p className="text-sm text-brand-navy/90 leading-relaxed">{post.content}</p>}
+
+                    {post.postType === 'poll' && post.pollOptions && (
+                      <div className="space-y-2 pt-1">
+                        {post.pollOptions.map((opt, i) => {
+                          const voteCount = (post.pollVotes?.[String(i)] || []).length;
+                          const pct = totalVotes > 0 ? Math.round((voteCount / totalVotes) * 100) : 0;
+                          const voted = userVoteKey === String(i);
+                          return (
+                            <button
+                              key={i}
+                              onClick={() => handleVote(post, i)}
+                              className={cn(
+                                "w-full text-left rounded-xl overflow-hidden border transition-all",
+                                voted ? "border-brand-gold" : "border-brand-navy/10 hover:border-brand-gold/40"
+                              )}
+                            >
+                              <div className="relative px-4 py-2.5">
+                                <div
+                                  className={cn("absolute inset-0 transition-all", voted ? "bg-brand-gold/15" : "bg-brand-navy/5")}
+                                  style={{ width: `${pct}%` }}
+                                />
+                                <div className="relative flex items-center justify-between">
+                                  <span className="text-sm font-medium">{opt.text}</span>
+                                  <span className="text-xs font-bold text-brand-navy/50">{pct}%</span>
+                                </div>
+                              </div>
+                            </button>
+                          );
+                        })}
+                        <p className="text-[10px] text-brand-navy/30 font-medium">{totalVotes} vote{totalVotes !== 1 ? 's' : ''}</p>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-5 pt-1 border-t border-brand-navy/5">
+                      <button
+                        onClick={() => handleLike(post)}
+                        className={cn("flex items-center gap-1.5 transition-colors text-xs font-bold", isLiked ? "text-brand-gold" : "text-brand-navy/30 hover:text-brand-gold")}
+                      >
+                        <Heart size={16} className={isLiked ? "fill-brand-gold" : ""} />
+                        {post.likesCount || 0}
+                      </button>
+                    </div>
+                  </div>
+                </motion.div>
+              );
+            } else {
+              return (
+                <motion.div key={`vp-${item.id}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5 rounded-[2rem] space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 shrink-0">
+                      <img src={item.authorPhoto || `https://picsum.photos/seed/${item.authorUid}/40`} alt="" className="w-full h-full object-cover" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-sm truncate">{item.authorName}</p>
+                        <span className="px-2 py-0.5 bg-brand-gold/10 rounded-full text-[9px] font-bold text-brand-gold uppercase shrink-0">Store</span>
+                      </div>
+                      <p className="text-[10px] text-brand-navy/40">{item.createdAt ? format(item.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-brand-navy/90 leading-relaxed">{item.content}</p>
+                </motion.div>
+              );
+            }
+          })}
+          {displayFeed.length === 0 && (
+            <div className="py-20 text-center text-brand-navy/20">
+              <Compass size={64} className="mx-auto mb-4 opacity-10" />
+              <p className="font-bold">{activeSubTab === 'following' ? 'No posts from people you follow' : 'Nothing posted yet'}</p>
+              <p className="text-sm">{activeSubTab === 'following' ? 'Follow people to see their posts here' : 'Be the first to post!'}</p>
             </div>
           )}
         </div>
