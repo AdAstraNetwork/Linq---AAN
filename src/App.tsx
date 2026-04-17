@@ -323,6 +323,155 @@ export default function App() {
     };
     seedDemoStores();
   }, []);
+
+  useEffect(() => {
+    const seedDemoPosts = async () => {
+      try {
+        const snap = await getDocs(query(collection(db, 'global_posts'), limit(1)));
+        if (!snap.empty) return;
+
+        const users = [
+          { uid: 'demo_u1', name: 'Alex Rivers',    photo: 'https://i.pravatar.cc/150?u=alexrivers',   role: 'consumer' },
+          { uid: 'demo_u2', name: 'Jordan Smith',   photo: 'https://i.pravatar.cc/150?u=jordansmith',  role: 'consumer' },
+          { uid: 'demo_u3', name: 'Casey Chen',     photo: 'https://i.pravatar.cc/150?u=caseychen',    role: 'consumer' },
+          { uid: 'demo_u4', name: 'Sam Taylor',     photo: 'https://i.pravatar.cc/150?u=samtaylor',    role: 'consumer' },
+          { uid: 'demo_u5', name: 'Morgan Lee',     photo: 'https://i.pravatar.cc/150?u=morganlee',    role: 'consumer' },
+        ];
+
+        const vendors = [
+          { uid: 'demo_v1', name: 'The Coffee House',  photo: 'https://picsum.photos/seed/coffee/200/200',  store: 'The Coffee House' },
+          { uid: 'demo_v2', name: 'Glow Beauty',       photo: 'https://picsum.photos/seed/beauty/200/200',  store: 'Glow Beauty' },
+          { uid: 'demo_v3', name: 'Iron Gym',          photo: 'https://picsum.photos/seed/gym/200/200',     store: 'Iron Gym' },
+          { uid: 'demo_v4', name: 'Urban Barber',      photo: 'https://picsum.photos/seed/barber/200/200',  store: 'Urban Barber' },
+        ];
+
+        const posts = [
+          // User posts
+          {
+            authorUid: users[0].uid, authorName: users[0].name, authorPhoto: users[0].photo, authorRole: 'consumer',
+            content: "Just hit my 8th stamp at The Coffee House ☕ Free coffee is so close I can taste it!",
+            postType: 'post', likesCount: 14,
+            likedBy: [users[1].uid, users[2].uid, users[3].uid, users[4].uid],
+            pollOptions: null, pollVotes: null,
+          },
+          {
+            authorUid: users[1].uid, authorName: users[1].name, authorPhoto: users[1].photo, authorRole: 'consumer',
+            content: "Glow Beauty just gave me the best facial I've ever had. The loyalty rewards make it even sweeter 💅",
+            postType: 'post', likesCount: 22,
+            likedBy: [users[0].uid, users[2].uid, users[4].uid],
+            pollOptions: null, pollVotes: null,
+          },
+          {
+            authorUid: users[2].uid, authorName: users[2].name, authorPhoto: users[2].photo, authorRole: 'consumer',
+            content: "Iron Gym is changing my life. Two months in and already redeemed my first free session 💪 Anyone else training there?",
+            postType: 'post', likesCount: 18,
+            likedBy: [users[3].uid, users[4].uid, users[0].uid],
+            pollOptions: null, pollVotes: null,
+          },
+          {
+            authorUid: users[3].uid, authorName: users[3].name, authorPhoto: users[3].photo, authorRole: 'consumer',
+            content: "PSA: Urban Barber now has Sunday hours 🙌 Got my fresh cut this morning and earned stamp #5. One more for a free service!",
+            postType: 'post', likesCount: 9,
+            likedBy: [users[1].uid, users[2].uid],
+            pollOptions: null, pollVotes: null,
+          },
+          {
+            authorUid: users[4].uid, authorName: users[4].name, authorPhoto: users[4].photo, authorRole: 'consumer',
+            content: "Linq is genuinely the best loyalty app I've used. Actually motivates me to keep going back to my favourite spots 🔥",
+            postType: 'post', likesCount: 31,
+            likedBy: [users[0].uid, users[1].uid, users[2].uid, users[3].uid],
+            pollOptions: null, pollVotes: null,
+          },
+          // Vendor posts
+          {
+            authorUid: vendors[0].uid, authorName: vendors[0].name, authorPhoto: vendors[0].photo, authorRole: 'vendor',
+            storeName: vendors[0].store,
+            content: "🎉 DOUBLE STAMPS this entire weekend! Friday through Sunday — every purchase earns 2x stamps. Come level up your card ☕",
+            postType: 'post', likesCount: 47,
+            likedBy: [users[0].uid, users[1].uid, users[2].uid, users[3].uid, users[4].uid],
+            pollOptions: null, pollVotes: null,
+          },
+          {
+            authorUid: vendors[1].uid, authorName: vendors[1].name, authorPhoto: vendors[1].photo, authorRole: 'vendor',
+            storeName: vendors[1].store,
+            content: "✨ Our summer skincare range has arrived! Book any facial this week and receive 3 BONUS stamps. Spaces filling fast 🌸",
+            postType: 'post', likesCount: 35,
+            likedBy: [users[1].uid, users[4].uid],
+            pollOptions: null, pollVotes: null,
+          },
+          {
+            authorUid: vendors[2].uid, authorName: vendors[2].name, authorPhoto: vendors[2].photo, authorRole: 'vendor',
+            storeName: vendors[2].store,
+            content: "New Olympic lifting platform just landed 💪 First 20 members to use it this week get a bonus stamp. First come, first served!",
+            postType: 'post', likesCount: 28,
+            likedBy: [users[2].uid, users[3].uid],
+            pollOptions: null, pollVotes: null,
+          },
+          // User polls
+          {
+            authorUid: users[0].uid, authorName: users[0].name, authorPhoto: users[0].photo, authorRole: 'consumer',
+            content: "Which local business deserves more love? 👇",
+            postType: 'poll', likesCount: 8,
+            likedBy: [users[1].uid, users[2].uid],
+            pollOptions: [{ text: 'The Coffee House ☕' }, { text: 'Glow Beauty 💅' }, { text: 'Iron Gym 💪' }, { text: 'Urban Barber ✂️' }],
+            pollVotes: { '0': [users[1].uid, users[2].uid], '1': [users[3].uid, users[4].uid], '2': [users[0].uid], '3': [] },
+          },
+          {
+            authorUid: users[3].uid, authorName: users[3].name, authorPhoto: users[3].photo, authorRole: 'consumer',
+            content: "What's your ideal loyalty reward? 🎁",
+            postType: 'poll', likesCount: 12,
+            likedBy: [users[0].uid, users[4].uid],
+            pollOptions: [{ text: 'Free item / drink' }, { text: 'Percentage discount' }, { text: 'Bonus stamps' }, { text: 'Exclusive experience' }],
+            pollVotes: { '0': [users[0].uid, users[2].uid], '1': [users[1].uid, users[3].uid], '2': [users[4].uid], '3': [] },
+          },
+          {
+            authorUid: users[4].uid, authorName: users[4].name, authorPhoto: users[4].photo, authorRole: 'consumer',
+            content: "How many loyalty cards are you actively collecting? 🃏",
+            postType: 'poll', likesCount: 7,
+            likedBy: [users[2].uid],
+            pollOptions: [{ text: '1–2 cards' }, { text: '3–5 cards' }, { text: '6–10 cards' }, { text: '10+ (collector mode)' }],
+            pollVotes: { '0': [users[3].uid], '1': [users[0].uid, users[1].uid, users[4].uid], '2': [users[2].uid], '3': [] },
+          },
+          // Vendor polls
+          {
+            authorUid: vendors[0].uid, authorName: vendors[0].name, authorPhoto: vendors[0].photo, authorRole: 'vendor',
+            storeName: vendors[0].store,
+            content: "Help us choose our next seasonal special! Vote below ☕👇",
+            postType: 'poll', likesCount: 19,
+            likedBy: [users[0].uid, users[1].uid, users[2].uid],
+            pollOptions: [{ text: 'Pumpkin Spice Latte 🎃' }, { text: 'Iced Matcha Coconut 🍵' }, { text: 'Lavender Honey Flat White 🌸' }, { text: 'Chai Oat Bomb 🧡' }],
+            pollVotes: { '0': [users[0].uid, users[3].uid], '1': [users[1].uid, users[4].uid], '2': [users[2].uid], '3': [] },
+          },
+          {
+            authorUid: vendors[2].uid, authorName: vendors[2].name, authorPhoto: vendors[2].photo, authorRole: 'vendor',
+            storeName: vendors[2].store,
+            content: "We're extending opening hours! When would you use the gym most? 🏋️",
+            postType: 'poll', likesCount: 23,
+            likedBy: [users[2].uid, users[3].uid, users[4].uid],
+            pollOptions: [{ text: 'Earlier mornings (5am)' }, { text: 'Late nights (until 11pm)' }, { text: 'Weekend afternoons' }, { text: 'All of the above!' }],
+            pollVotes: { '0': [users[0].uid], '1': [users[1].uid, users[3].uid], '2': [users[2].uid], '3': [users[4].uid] },
+          },
+          {
+            authorUid: vendors[3].uid, authorName: vendors[3].name, authorPhoto: vendors[3].photo, authorRole: 'vendor',
+            storeName: vendors[3].store,
+            content: "What new service should we add? Your vote decides! ✂️",
+            postType: 'poll', likesCount: 15,
+            likedBy: [users[0].uid, users[3].uid],
+            pollOptions: [{ text: 'Hot towel shave' }, { text: 'Hair colouring' }, { text: 'Scalp treatment' }, { text: "Men's facials" }],
+            pollVotes: { '0': [users[0].uid, users[1].uid], '1': [users[2].uid], '2': [users[3].uid, users[4].uid], '3': [] },
+          },
+        ];
+
+        for (const post of posts) {
+          await addDoc(collection(db, 'global_posts'), { ...post, createdAt: serverTimestamp() });
+        }
+      } catch (err) {
+        console.error('Error seeding demo posts:', err);
+      }
+    };
+    seedDemoPosts();
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
