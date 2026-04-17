@@ -2881,7 +2881,7 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
   );
 }
 
-function ChatListItem({ chat, currentUser, onClick }: { chat: Chat, currentUser: FirebaseUser, onClick: () => void }) {
+function ChatListItem({ chat, currentUser, onClick }: { chat: Chat, currentUser: FirebaseUser, onClick: () => void, key?: React.Key }) {
   const [partner, setPartner] = useState<UserProfile | null>(null);
   const partnerUid = chat.uids.find(id => id !== currentUser.uid);
 
@@ -3480,7 +3480,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
           <h2 className="text-2xl font-bold">{targetUser.name}</h2>
           <p className="text-brand-gold font-bold text-xs uppercase tracking-[0.2em] mb-4">@{targetUser.email?.split('@')[0]}</p>
           
-          {currentUser.uid !== targetUser.uid && (
+          {currentUser && currentUser.uid !== targetUser.uid && (
             <div className="flex justify-center gap-2 mb-6">
               <button 
                 onClick={handleFriendClick}
