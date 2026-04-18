@@ -2117,6 +2117,13 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
     const q = query(collection(db, 'cards'), where('store_id', '==', vendorStore.id));
     return onSnapshot(q, snap => setStoreCards(snap.docs.map(d => ({ id: d.id, ...d.data() } as Card))));
   }, [vendorStore?.id]);
+
+  const [storeWallPosts, setStoreWallPosts] = useState<any[]>([]);
+  useEffect(() => {
+    if (!vendorStore) return;
+    const q = query(collection(db, 'stores', vendorStore.id, 'posts'), orderBy('createdAt', 'desc'), limit(30));
+    return onSnapshot(q, snap => setStoreWallPosts(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+  }, [vendorStore?.id]);
   const [following, setFollowing] = useState<UserProfile[]>([]);
   const [followers, setFollowers] = useState<UserProfile[]>([]);
   const [showFollowModal, setShowFollowModal] = useState(false);
@@ -2364,13 +2371,41 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
 
         {activeSubTab === 'posts' && (
           <div className="space-y-4">
+            {/* Customer wall posts on this business */}
+            {storeWallPosts.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold px-1 flex items-center gap-2">
+                  <MessageSquare size={12} /> Wall Posts ({storeWallPosts.length})
+                </p>
+                {storeWallPosts.map(post => (
+                  <div key={post.id} className="glass-card p-5 rounded-[2rem] space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full overflow-hidden border border-brand-navy/5 shrink-0">
+                        <img src={post.authorPhoto || `https://i.pravatar.cc/40?u=${post.authorUid}`} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm">
+                          {post.authorName}
+                          <span className="font-normal text-brand-navy/40"> › {vendorStore?.name || profile.name}</span>
+                        </p>
+                        <p className="text-[10px] text-brand-navy/40 font-medium">
+                          {post.createdAt ? format(post.createdAt.toDate(), 'MMM d · h:mm a') : 'Just now'}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-brand-navy/80 leading-relaxed">{post.content}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Vendor's own global feed posts */}
             {myGlobalPosts.map(post => (
               <FeedPostCard key={post.id} post={post} currentUser={user} onViewUser={onViewUser}
                 onLike={async (p) => { const ref = doc(db, 'global_posts', p.id); const liked = (p.likedBy || []).includes(user.uid); await updateDoc(ref, { likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid), likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1 }); }}
                 onVote={async (p, idx) => { const ref = doc(db, 'global_posts', p.id); const votes = p.pollVotes || {}; const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid)); const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) }; if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid); await updateDoc(ref, updates); }}
               />
             ))}
-            {myGlobalPosts.length === 0 && <div className="py-16 text-center text-brand-navy/20"><MessageSquare size={48} className="mx-auto mb-3 opacity-10" /><p className="font-bold text-sm">No posts yet</p></div>}
+            {myGlobalPosts.length === 0 && storeWallPosts.length === 0 && <div className="py-16 text-center text-brand-navy/20"><MessageSquare size={48} className="mx-auto mb-3 opacity-10" /><p className="font-bold text-sm">No posts yet</p></div>}
           </div>
         )}
 
@@ -4064,15 +4099,18 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile }: 
 
   const PAGE_SIZE = 10;
 
-  const loadInitial = async () => {
+  const loadInitial = () => {
     setLoading(true);
-    try {
-      const snap = await getDocs(query(collection(db, 'global_posts'), orderBy('createdAt', 'desc'), limit(PAGE_SIZE)));
-      setGlobalPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost)));
-      lastDocRef.current = snap.docs[snap.docs.length - 1] ?? null;
-      setHasMore(snap.docs.length === PAGE_SIZE);
-    } catch (err) { console.error("global_posts:", err); }
-    setLoading(false);
+    return onSnapshot(
+      query(collection(db, 'global_posts'), orderBy('createdAt', 'desc'), limit(PAGE_SIZE)),
+      (snap) => {
+        setGlobalPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost)));
+        lastDocRef.current = snap.docs[snap.docs.length - 1] ?? null;
+        setHasMore(snap.docs.length === PAGE_SIZE);
+        setLoading(false);
+      },
+      (err) => { console.error("global_posts:", err); setLoading(false); }
+    );
   };
 
   const loadMoreRef = useRef(false);
@@ -4091,7 +4129,7 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile }: 
     setLoadingMore(false);
   };
 
-  useEffect(() => { loadInitial(); }, []);
+  useEffect(() => { return loadInitial(); }, []);
 
   // Re-observe whenever posts change so sentinel is re-checked after each page loads
   useEffect(() => {
