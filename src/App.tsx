@@ -2185,8 +2185,11 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
     };
   }, [profile?.uid]);
 
+  const profileLoadingMoreRef = useRef(false);
+
   const loadMoreProfilePosts = async () => {
-    if (!profile || profileLoadingMore || !profileHasMore || !profileLastDocRef.current) return;
+    if (!profile || profileLoadingMoreRef.current || !profileHasMore || !profileLastDocRef.current) return;
+    profileLoadingMoreRef.current = true;
     setProfileLoadingMore(true);
     try {
       const snap = await getDocs(query(collection(db, 'global_posts'), where('authorUid', '==', profile.uid), orderBy('createdAt', 'desc'), startAfter(profileLastDocRef.current), limit(PROFILE_PAGE_SIZE)));
@@ -2194,16 +2197,17 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
       profileLastDocRef.current = snap.docs[snap.docs.length - 1] ?? profileLastDocRef.current;
       setProfileHasMore(snap.docs.length === PROFILE_PAGE_SIZE);
     } catch { /* ignore */ }
+    profileLoadingMoreRef.current = false;
     setProfileLoadingMore(false);
   };
 
   useEffect(() => {
     const el = profileSentinelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) loadMoreProfilePosts(); }, { threshold: 0.1 });
+    if (!el || !profileHasMore) return;
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) loadMoreProfilePosts(); }, { rootMargin: '200px' });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [profileLoadingMore, profileHasMore, profile?.uid]);
+  }, [myGlobalPosts.length, profileHasMore, profile?.uid]);
 
   const handlePostOnWall = async () => {
     if (!newPost.trim() || !profile) return;
@@ -4065,8 +4069,11 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile }: 
     setLoading(false);
   };
 
+  const loadMoreRef = useRef(false);
+
   const loadMore = async () => {
-    if (loadingMore || !hasMore || !lastDocRef.current) return;
+    if (loadMoreRef.current || !hasMore || !lastDocRef.current) return;
+    loadMoreRef.current = true;
     setLoadingMore(true);
     try {
       const snap = await getDocs(query(collection(db, 'global_posts'), orderBy('createdAt', 'desc'), startAfter(lastDocRef.current), limit(PAGE_SIZE)));
@@ -4074,18 +4081,20 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile }: 
       lastDocRef.current = snap.docs[snap.docs.length - 1] ?? lastDocRef.current;
       setHasMore(snap.docs.length === PAGE_SIZE);
     } catch (err) { console.error("load more:", err); }
+    loadMoreRef.current = false;
     setLoadingMore(false);
   };
 
   useEffect(() => { loadInitial(); }, []);
 
+  // Re-observe whenever posts change so sentinel is re-checked after each page loads
   useEffect(() => {
     const el = sentinelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) loadMore(); }, { threshold: 0.1 });
+    if (!el || !hasMore) return;
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) loadMore(); }, { rootMargin: '200px' });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [loadingMore, hasMore]);
+  }, [globalPosts.length, hasMore]);
 
   useEffect(() => {
     const unsubVendor = onSnapshot(
@@ -4255,6 +4264,11 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile }: 
 function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveChatId, onViewUser, vendorStore }: { currentUser: FirebaseUser, currentProfile: UserProfile | null, activeChatId: string | null, setActiveChatId: (id: string | null) => void, onViewUser: (u: UserProfile) => void, vendorStore?: StoreProfile | null }) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [olderMessages, setOlderMessages] = useState<ChatMessage[]>([]);
+  const [msgHasMore, setMsgHasMore] = useState(false);
+  const [msgLoadingMore, setMsgLoadingMore] = useState(false);
+  const msgLastDocRef = useRef<any>(null);
+  const msgLoadingMoreRef = useRef(false);
   const [newMessage, setNewMessage] = useState('');
   const [chatPartner, setChatPartner] = useState<UserProfile | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
@@ -4277,9 +4291,15 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
   useEffect(() => {
     if (!activeChatId) {
       setMessages([]);
+      setOlderMessages([]);
+      setMsgHasMore(false);
+      msgLastDocRef.current = null;
       setChatPartner(null);
       return;
     }
+    setOlderMessages([]);
+    setMsgHasMore(false);
+    msgLastDocRef.current = null;
 
     // Fetch partner — poll briefly if doc not yet created (race with background creation)
     const loadPartner = async (retries = 5) => {
@@ -4307,7 +4327,13 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
       limit(15)
     );
     return onSnapshot(q, (snap) => {
-      setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)).reverse());
+      const latest = snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)).reverse();
+      setMessages(latest);
+      // The last doc in desc order is the oldest in this window — cursor for loading older
+      if (snap.docs.length === 15) {
+        msgLastDocRef.current = snap.docs[snap.docs.length - 1];
+        setMsgHasMore(true);
+      }
     });
   }, [activeChatId, currentUser.uid]);
 
@@ -4317,6 +4343,35 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
     const t = setTimeout(() => { el.scrollTop = el.scrollHeight; }, 0);
     return () => clearTimeout(t);
   }, [messages, activeChatId]);
+
+  const loadOlderMessages = async () => {
+    if (!activeChatId || msgLoadingMoreRef.current || !msgHasMore || !msgLastDocRef.current) return;
+    msgLoadingMoreRef.current = true;
+    setMsgLoadingMore(true);
+    const el = scrollContainerRef.current;
+    const prevScrollHeight = el?.scrollHeight ?? 0;
+    try {
+      const snap = await getDocs(query(
+        collection(db, 'chats', activeChatId, 'messages'),
+        orderBy('createdAt', 'desc'),
+        startAfter(msgLastDocRef.current),
+        limit(15)
+      ));
+      const older = snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)).reverse();
+      setOlderMessages(prev => [...older, ...prev]);
+      msgLastDocRef.current = snap.docs.length === 15 ? snap.docs[snap.docs.length - 1] : null;
+      setMsgHasMore(snap.docs.length === 15);
+      // Restore scroll so content doesn't jump
+      if (el) requestAnimationFrame(() => { el.scrollTop = el.scrollHeight - prevScrollHeight; });
+    } catch { /* ignore */ }
+    msgLoadingMoreRef.current = false;
+    setMsgLoadingMore(false);
+  };
+
+  const handleMsgScroll = () => {
+    const el = scrollContainerRef.current;
+    if (el && el.scrollTop < 60) loadOlderMessages();
+  };
 
   useEffect(() => {
     if (!vendorStore) return;
@@ -4423,10 +4478,17 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
           </button>
         </header>
 
-        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto py-4 space-y-2" onClick={() => setSelectedMsgId(null)}>
-          {messages.map((msg, idx) => {
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto py-4 space-y-2" onClick={() => setSelectedMsgId(null)} onScroll={handleMsgScroll}>
+          {msgLoadingMore && (
+            <div className="flex justify-center py-2">
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}>
+                <Sparkles className="w-4 h-4 text-brand-gold/50" />
+              </motion.div>
+            </div>
+          )}
+          {[...olderMessages, ...messages].map((msg, idx, all) => {
             const isMe = msg.senderUid === currentUser.uid;
-            const showName = idx === 0 || messages[idx-1].senderUid !== msg.senderUid;
+            const showName = idx === 0 || all[idx-1].senderUid !== msg.senderUid;
             const isSelected = selectedMsgId === msg.id;
             return (
               <div key={msg.id} className="w-full px-2">
