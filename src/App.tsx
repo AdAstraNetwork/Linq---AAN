@@ -30,7 +30,8 @@ import {
   limit,
   collectionGroup,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  startAfter
 } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { cn } from './lib/utils';
@@ -2094,6 +2095,11 @@ function CardBuilder({ store }: { store: StoreProfile | null }) {
 function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { profile: UserProfile | null, userCards: Card[], onLogout: () => void, onViewUser: (u: UserProfile) => void, user: FirebaseUser }) {
   const [activeSubTab, setActiveSubTab] = useState<'posts' | 'interactions'>('posts');
   const [showProfileSettings, setShowProfileSettings] = useState(false);
+  const profileLastDocRef = useRef<any>(null);
+  const [profileHasMore, setProfileHasMore] = useState(true);
+  const [profileLoadingMore, setProfileLoadingMore] = useState(false);
+  const profileSentinelRef = useRef<HTMLDivElement>(null);
+  const PROFILE_PAGE_SIZE = 10;
   const [vendorStore, setVendorStore] = useState<StoreProfile | null>(null);
   const [storeCards, setStoreCards] = useState<Card[]>([]);
 
@@ -2152,10 +2158,12 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
       setWallPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
-    const gq = query(collection(db, 'global_posts'), where('authorUid', '==', profile.uid), orderBy('createdAt', 'desc'));
-    const unsubGlobalPosts = onSnapshot(gq, (snap) => {
+    getDocs(query(collection(db, 'global_posts'), where('authorUid', '==', profile.uid), orderBy('createdAt', 'desc'), limit(PROFILE_PAGE_SIZE))).then(snap => {
       setMyGlobalPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost)));
-    });
+      profileLastDocRef.current = snap.docs[snap.docs.length - 1] ?? null;
+      setProfileHasMore(snap.docs.length === PROFILE_PAGE_SIZE);
+    }).catch(() => {});
+    const unsubGlobalPosts = () => {};
 
     const lq = query(collection(db, 'global_posts'), where('likedBy', 'array-contains', profile.uid), orderBy('createdAt', 'desc'));
     const unsubLiked = onSnapshot(lq, (snap) => {
@@ -2176,6 +2184,26 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
       unsubAllPolls();
     };
   }, [profile?.uid]);
+
+  const loadMoreProfilePosts = async () => {
+    if (!profile || profileLoadingMore || !profileHasMore || !profileLastDocRef.current) return;
+    setProfileLoadingMore(true);
+    try {
+      const snap = await getDocs(query(collection(db, 'global_posts'), where('authorUid', '==', profile.uid), orderBy('createdAt', 'desc'), startAfter(profileLastDocRef.current), limit(PROFILE_PAGE_SIZE)));
+      setMyGlobalPosts(prev => [...prev, ...snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost))]);
+      profileLastDocRef.current = snap.docs[snap.docs.length - 1] ?? profileLastDocRef.current;
+      setProfileHasMore(snap.docs.length === PROFILE_PAGE_SIZE);
+    } catch { /* ignore */ }
+    setProfileLoadingMore(false);
+  };
+
+  useEffect(() => {
+    const el = profileSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) loadMoreProfilePosts(); }, { threshold: 0.1 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [profileLoadingMore, profileHasMore, profile?.uid]);
 
   const handlePostOnWall = async () => {
     if (!newPost.trim() || !profile) return;
@@ -2484,6 +2512,16 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
                   }}
                 />
               ))}
+            </div>
+          )}
+
+          {/* Infinite scroll sentinel for profile posts */}
+          <div ref={profileSentinelRef} className="h-4" />
+          {profileLoadingMore && (
+            <div className="flex justify-center py-4">
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}>
+                <Sparkles className="w-5 h-5 text-brand-gold/50" />
+              </motion.div>
             </div>
           )}
 
@@ -4008,23 +4046,54 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile }: 
   const [followingUids, setFollowingUids] = useState<Set<string>>(new Set());
   const [followingStoreIds, setFollowingStoreIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
   const [activeSubTab, setActiveSubTab] = useState<'all' | 'following'>('all');
+  const lastDocRef = useRef<any>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+
+  const PAGE_SIZE = 10;
+
+  const loadInitial = async () => {
+    setLoading(true);
+    try {
+      const snap = await getDocs(query(collection(db, 'global_posts'), orderBy('createdAt', 'desc'), limit(PAGE_SIZE)));
+      setGlobalPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost)));
+      lastDocRef.current = snap.docs[snap.docs.length - 1] ?? null;
+      setHasMore(snap.docs.length === PAGE_SIZE);
+    } catch (err) { console.error("global_posts:", err); }
+    setLoading(false);
+  };
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore || !lastDocRef.current) return;
+    setLoadingMore(true);
+    try {
+      const snap = await getDocs(query(collection(db, 'global_posts'), orderBy('createdAt', 'desc'), startAfter(lastDocRef.current), limit(PAGE_SIZE)));
+      setGlobalPosts(prev => [...prev, ...snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost))]);
+      lastDocRef.current = snap.docs[snap.docs.length - 1] ?? lastDocRef.current;
+      setHasMore(snap.docs.length === PAGE_SIZE);
+    } catch (err) { console.error("load more:", err); }
+    setLoadingMore(false);
+  };
+
+  useEffect(() => { loadInitial(); }, []);
 
   useEffect(() => {
-    const unsubGlobal = onSnapshot(
-      query(collection(db, 'global_posts'), orderBy('createdAt', 'desc'), limit(15)),
-      (snap) => {
-        setGlobalPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost)));
-        setLoading(false);
-      },
-      (err) => { console.error("global_posts:", err); setLoading(false); }
-    );
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) loadMore(); }, { threshold: 0.1 });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadingMore, hasMore]);
+
+  useEffect(() => {
     const unsubVendor = onSnapshot(
       query(collectionGroup(db, 'posts'), orderBy('createdAt', 'desc'), limit(20)),
       (snap) => setVendorPosts(snap.docs.map(d => ({ id: d.id, _type: 'vendor', ...d.data() }))),
       (err) => console.error("vendor posts:", err)
     );
-    return () => { unsubGlobal(); unsubVendor(); };
+    return () => unsubVendor();
   }, []);
 
   useEffect(() => {
@@ -4166,6 +4235,15 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile }: 
               <Compass size={64} className="mx-auto mb-4 opacity-10" />
               <p className="font-bold">{activeSubTab === 'following' ? 'No posts from people you follow' : 'Nothing posted yet'}</p>
               <p className="text-sm">{activeSubTab === 'following' ? 'Follow people to see their posts here' : 'Be the first to post!'}</p>
+            </div>
+          )}
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} className="h-4" />
+          {loadingMore && (
+            <div className="flex justify-center py-4">
+              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}>
+                <Sparkles className="w-5 h-5 text-brand-gold/50" />
+              </motion.div>
             </div>
           )}
         </div>
