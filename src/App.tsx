@@ -4340,8 +4340,13 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
-    const t = setTimeout(() => { el.scrollTop = el.scrollHeight; }, 0);
-    return () => clearTimeout(t);
+    let cancelled = false;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) el.scrollTop = el.scrollHeight;
+      });
+    });
+    return () => { cancelled = true; };
   }, [messages, activeChatId]);
 
   const loadOlderMessages = async () => {
