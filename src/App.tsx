@@ -166,6 +166,14 @@ interface StoreProfile {
   isVerified: boolean;
   stamps_required_for_reward: number;
   theme?: string;
+  location?: string;
+  visibilitySettings?: {
+    members?: boolean;
+    stamps?: boolean;
+    activeCards?: boolean;
+    returnRate?: boolean;
+    followers?: boolean;
+  };
 }
 
 interface Card {
@@ -2070,6 +2078,22 @@ function CardBuilder({ store }: { store: StoreProfile | null }) {
 function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { profile: UserProfile | null, userCards: Card[], onLogout: () => void, onViewUser: (u: UserProfile) => void, user: FirebaseUser }) {
   const [activeSubTab, setActiveSubTab] = useState<'posts' | 'interactions'>('posts');
   const [showProfileSettings, setShowProfileSettings] = useState(false);
+  const [vendorStore, setVendorStore] = useState<StoreProfile | null>(null);
+  const [storeCards, setStoreCards] = useState<Card[]>([]);
+
+  useEffect(() => {
+    if (profile?.role !== 'vendor') return;
+    const q = query(collection(db, 'stores'), where('ownerUid', '==', profile.uid));
+    return onSnapshot(q, snap => {
+      if (!snap.empty) setVendorStore({ id: snap.docs[0].id, ...snap.docs[0].data() } as StoreProfile);
+    });
+  }, [profile?.uid, profile?.role]);
+
+  useEffect(() => {
+    if (!vendorStore) return;
+    const q = query(collection(db, 'cards'), where('store_id', '==', vendorStore.id));
+    return onSnapshot(q, snap => setStoreCards(snap.docs.map(d => ({ id: d.id, ...d.data() } as Card))));
+  }, [vendorStore?.id]);
   const [following, setFollowing] = useState<UserProfile[]>([]);
   const [followers, setFollowers] = useState<UserProfile[]>([]);
   const [showFollowModal, setShowFollowModal] = useState(false);
@@ -2163,17 +2187,197 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
   if (!profile) return null;
 
   const lifetimeStamps = userCards.reduce((acc, c) => acc + (c.current_stamps || 0) + ((c.total_completed_cycles || 0) * 10), 0) || profile.totalStamps || 0;
-  const totalStamps = lifetimeStamps;
   const archivedCardsCount = profile.totalRedeemed || 0;
   const activeCardsCount = userCards.filter(c => !c.isArchived).length;
 
+  // Vendor stats
+  const totalMembers = storeCards.length > 0 ? new Set(storeCards.map(c => c.user_id)).size : 0;
+  const stampsRequired = vendorStore?.stamps_required_for_reward || 10;
+  const totalStampsGiven = storeCards.reduce((sum, c) => sum + (c.current_stamps || 0) + ((c.total_completed_cycles || 0) * stampsRequired), 0);
+  const activeStoreCards = storeCards.filter(c => !c.isArchived).length;
+  const returningUsers = storeCards.filter(c => (c.total_completed_cycles || 0) > 0).length;
+  const returnRate = totalMembers > 0 ? Math.round((returningUsers / totalMembers) * 100) : 0;
+  const vis = vendorStore?.visibilitySettings;
+
+  const settingsModal = (
+    <AnimatePresence>
+      {showProfileSettings && (
+        <ProfileSettingsModal profile={profile} user={user} onClose={() => setShowProfileSettings(false)} />
+      )}
+    </AnimatePresence>
+  );
+
+  // ── Vendor profile layout ──
+  if (profile.role === 'vendor') {
+    const theme = vendorStore?.theme || '#1e3a5f';
+    return (
+      <div className="space-y-6 pb-20 text-brand-navy">
+        {settingsModal}
+
+        {/* Business hero banner */}
+        <div className="relative rounded-[2.5rem] overflow-hidden" style={{ background: `linear-gradient(135deg, ${theme}ee, ${theme}88)` }}>
+          <div className="px-6 pt-8 pb-6">
+            <button onClick={() => setShowProfileSettings(true)}
+              className="absolute top-4 right-4 p-2 rounded-2xl bg-white/20 backdrop-blur-sm active:scale-95 transition-all">
+              <Settings size={18} className="text-white" />
+            </button>
+            <div className="flex items-center gap-4">
+              <div className="w-20 h-20 rounded-[1.5rem] overflow-hidden border-4 border-white/30 shadow-xl shrink-0 bg-white/10">
+                {vendorStore?.logoUrl
+                  ? <img src={vendorStore.logoUrl} alt="" className="w-full h-full object-cover" />
+                  : <div className="w-full h-full flex items-center justify-center"><Building2 size={32} className="text-white/60" /></div>}
+              </div>
+              <div>
+                <h2 className="font-display text-2xl font-bold text-white leading-tight">{vendorStore?.name || profile.name}</h2>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  {vendorStore?.category && (
+                    <span className="text-[10px] font-bold uppercase tracking-widest bg-white/20 text-white px-2 py-1 rounded-lg">{vendorStore.category}</span>
+                  )}
+                  {vendorStore?.location && (
+                    <span className="flex items-center gap-1 text-[10px] text-white/70 font-medium">
+                      <MapPin size={10} />{vendorStore.location}
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-white/60 mt-1">@{profile.handle || user.email?.split('@')[0]}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Business stats */}
+        <div className="grid grid-cols-2 gap-3">
+          {(vis?.members !== false) && (
+            <div className="glass-card p-5 rounded-[2rem]">
+              <div className="flex items-center gap-2 mb-1">
+                <Users size={16} className="text-brand-gold" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Members</span>
+              </div>
+              <p className="text-3xl font-bold">{totalMembers}</p>
+              <p className="text-[10px] text-brand-navy/40 mt-0.5">total cardholders</p>
+            </div>
+          )}
+          {(vis?.stamps !== false) && (
+            <div className="glass-card p-5 rounded-[2rem]">
+              <div className="flex items-center gap-2 mb-1">
+                <CheckCircle2 size={16} className="text-brand-gold" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Stamps</span>
+              </div>
+              <p className="text-3xl font-bold">{totalStampsGiven}</p>
+              <p className="text-[10px] text-brand-navy/40 mt-0.5">given lifetime</p>
+            </div>
+          )}
+          {(vis?.activeCards !== false) && (
+            <div className="glass-card p-5 rounded-[2rem]">
+              <div className="flex items-center gap-2 mb-1">
+                <Wallet size={16} className="text-brand-gold" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Active</span>
+              </div>
+              <p className="text-3xl font-bold">{activeStoreCards}</p>
+              <p className="text-[10px] text-brand-navy/40 mt-0.5">active cards</p>
+            </div>
+          )}
+          {(vis?.returnRate !== false) && (
+            <div className="glass-card p-5 rounded-[2rem]">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp size={16} className="text-brand-gold" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Return Rate</span>
+              </div>
+              <p className="text-3xl font-bold">{returnRate}<span className="text-lg">%</span></p>
+              <p className="text-[10px] text-brand-navy/40 mt-0.5">avg user return</p>
+            </div>
+          )}
+        </div>
+
+        {/* Followers / Following */}
+        {(vis?.followers !== false) && (
+          <div className="grid grid-cols-2 gap-3">
+            <div onClick={() => { setFollowModalTab('following'); setShowFollowModal(true); }} className="cursor-pointer">
+              <StatSquare icon={<Users className="text-brand-gold" />} label="Following" value={following.length.toString()} />
+            </div>
+            <div onClick={() => { setFollowModalTab('followers'); setShowFollowModal(true); }} className="cursor-pointer">
+              <StatSquare icon={<UserPlus className="text-brand-gold" />} label="Followers" value={followers.length.toString()} />
+            </div>
+          </div>
+        )}
+
+        {/* Posts */}
+        <div className="flex p-1 glass-card rounded-2xl">
+          <button onClick={() => setActiveSubTab('posts')}
+            className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all", activeSubTab === 'posts' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}>
+            Posts
+          </button>
+          <button onClick={() => setActiveSubTab('interactions')}
+            className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all", activeSubTab === 'interactions' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}>
+            Interactions
+          </button>
+        </div>
+
+        {activeSubTab === 'posts' && (
+          <div className="space-y-4">
+            {myGlobalPosts.map(post => (
+              <FeedPostCard key={post.id} post={post} currentUser={user} onViewUser={onViewUser}
+                onLike={async (p) => { const ref = doc(db, 'global_posts', p.id); const liked = (p.likedBy || []).includes(user.uid); await updateDoc(ref, { likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid), likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1 }); }}
+                onVote={async (p, idx) => { const ref = doc(db, 'global_posts', p.id); const votes = p.pollVotes || {}; const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid)); const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) }; if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid); await updateDoc(ref, updates); }}
+              />
+            ))}
+            {myGlobalPosts.length === 0 && <div className="py-16 text-center text-brand-navy/20"><MessageSquare size={48} className="mx-auto mb-3 opacity-10" /><p className="font-bold text-sm">No posts yet</p></div>}
+          </div>
+        )}
+
+        {activeSubTab === 'interactions' && (() => {
+          const votedPolls = allPostsForVotes.filter(p => Object.values(p.pollVotes || {}).some(arr => (arr as string[]).includes(profile.uid)));
+          return (
+            <div className="space-y-4">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold px-1 flex items-center gap-2"><Heart size={12} fill="currentColor" /> Liked ({likedPosts.length})</p>
+              {likedPosts.map(post => (
+                <FeedPostCard key={post.id} post={post} currentUser={user} onViewUser={onViewUser}
+                  onLike={async (p) => { const ref = doc(db, 'global_posts', p.id); const liked = (p.likedBy || []).includes(user.uid); await updateDoc(ref, { likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid), likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1 }); }}
+                  onVote={async (p, idx) => { const ref = doc(db, 'global_posts', p.id); const votes = p.pollVotes || {}; const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid)); const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) }; if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid); await updateDoc(ref, updates); }}
+                />
+              ))}
+              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold px-1 flex items-center gap-2 mt-4"><BarChart2 size={12} /> Votes Cast ({votedPolls.length})</p>
+              {votedPolls.map(post => (
+                <FeedPostCard key={post.id} post={post} currentUser={user} onViewUser={onViewUser}
+                  onLike={async (p) => { const ref = doc(db, 'global_posts', p.id); const liked = (p.likedBy || []).includes(user.uid); await updateDoc(ref, { likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid), likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1 }); }}
+                  onVote={async (p, idx) => { const ref = doc(db, 'global_posts', p.id); const votes = p.pollVotes || {}; const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid)); const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) }; if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid); await updateDoc(ref, updates); }}
+                />
+              ))}
+            </div>
+          );
+        })()}
+
+        <AnimatePresence>
+          {showFollowModal && (
+            <Modal title={followModalTab === 'following' ? `Following (${following.length})` : `Followers (${followers.length})`} onClose={() => setShowFollowModal(false)}>
+              <div className="space-y-4">
+                <div className="flex p-1 bg-brand-bg rounded-2xl">
+                  <button onClick={() => setFollowModalTab('following')} className={cn("flex-1 py-2.5 rounded-xl text-xs font-bold transition-all", followModalTab === 'following' ? "bg-brand-navy text-white shadow" : "text-brand-navy/40")}>Following ({following.length})</button>
+                  <button onClick={() => setFollowModalTab('followers')} className={cn("flex-1 py-2.5 rounded-xl text-xs font-bold transition-all", followModalTab === 'followers' ? "bg-brand-navy text-white shadow" : "text-brand-navy/40")}>Followers ({followers.length})</button>
+                </div>
+                <div className="space-y-2">
+                  {(followModalTab === 'following' ? following : followers).map(u => (
+                    <div key={u.uid} className="flex items-center gap-3 p-3 rounded-2xl bg-brand-bg cursor-pointer" onClick={() => { onViewUser(u); setShowFollowModal(false); }}>
+                      <div className="w-10 h-10 rounded-2xl overflow-hidden border border-brand-navy/5 shrink-0"><img src={u.photoURL || `https://i.pravatar.cc/40?u=${u.uid}`} alt="" className="w-full h-full object-cover" /></div>
+                      <div><p className="font-bold text-sm">{u.name}</p><p className="text-[10px] text-brand-navy/40 font-bold uppercase">@{u.email?.split('@')[0]}</p></div>
+                    </div>
+                  ))}
+                  {(followModalTab === 'following' ? following : followers).length === 0 && <p className="text-xs text-brand-navy/40 text-center py-8">{followModalTab === 'following' ? 'Not following anyone yet' : 'No followers yet'}</p>}
+                </div>
+              </div>
+            </Modal>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  // ── Consumer profile layout ──
   return (
     <div className="space-y-6 pb-20 text-brand-navy">
       <header className="text-center relative">
-        <button
-          onClick={() => setShowProfileSettings(true)}
-          className="absolute right-0 top-0 p-2 rounded-2xl bg-white border border-brand-navy/10 shadow-sm active:scale-95 transition-all"
-        >
+        <button onClick={() => setShowProfileSettings(true)}
+          className="absolute right-0 top-0 p-2 rounded-2xl bg-white border border-brand-navy/10 shadow-sm active:scale-95 transition-all">
           <Settings size={18} className="text-brand-navy/60" />
         </button>
         <div className="w-32 h-32 rounded-[2.5rem] overflow-hidden border-4 border-white mx-auto mb-4 shadow-xl">
@@ -2183,18 +2387,10 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
         <p className="text-brand-gold font-bold text-xs uppercase tracking-[0.2em]">@{profile.handle || user.email?.split('@')[0]}</p>
       </header>
 
-      <AnimatePresence>
-        {showProfileSettings && (
-          <ProfileSettingsModal
-            profile={profile}
-            user={user}
-            onClose={() => setShowProfileSettings(false)}
-          />
-        )}
-      </AnimatePresence>
+      {settingsModal}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <StatSquare icon={<CheckCircle2 className="text-brand-gold" />} label="Stamps" value={totalStamps.toString()} />
+        <StatSquare icon={<CheckCircle2 className="text-brand-gold" />} label="Stamps" value={lifetimeStamps.toString()} />
         <StatSquare icon={<Trophy className="text-brand-gold" />} label="Rewards" value={archivedCardsCount.toString()} />
         <div onClick={() => { setFollowModalTab('following'); setShowFollowModal(true); }} className="cursor-pointer">
           <StatSquare icon={<Users className="text-brand-gold" />} label="Following" value={following.length.toString()} />
@@ -2434,6 +2630,17 @@ const THEME_COLOURS = [
 
 const CATEGORIES: Category[] = ['Food', 'Beauty', 'Barber', 'Gym', 'Parking', 'Retail'];
 
+function ToggleSwitch({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!on)}
+      className={cn('w-12 h-7 rounded-full transition-all relative shrink-0', on ? 'bg-green-500' : 'bg-brand-navy/20')}
+    >
+      <span className={cn('absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all', on ? 'left-6' : 'left-1')} />
+    </button>
+  );
+}
+
 function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile, user: FirebaseUser, onClose: () => void }) {
   const [name, setName] = useState(profile.name || '');
   const [handle, setHandle] = useState(profile.handle || user.email?.split('@')[0] || '');
@@ -2443,6 +2650,8 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
   const [storeCategory, setStoreCategory] = useState<Category>('Food');
   const [storeTheme, setStoreTheme] = useState('#1e3a5f');
   const [storeLogo, setStoreLogo] = useState('');
+  const [storeLocation, setStoreLocation] = useState('');
+  const [visibility, setVisibility] = useState({ members: true, stamps: true, activeCards: true, returnRate: true, followers: true });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -2457,6 +2666,8 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
         setStoreCategory(s.category || 'Food');
         setStoreTheme(s.theme || '#1e3a5f');
         setStoreLogo(s.logoUrl || '');
+        setStoreLocation(s.location || s.address || '');
+        setVisibility({ members: true, stamps: true, activeCards: true, returnRate: true, followers: true, ...(s.visibilitySettings || {}) });
       }
     });
     return unsub;
@@ -2466,17 +2677,13 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
     setSaving(true);
     try {
       const profileUpdates: any = { name, handle };
-      if (isVendor !== (profile.role === 'vendor')) {
-        profileUpdates.role = isVendor ? 'vendor' : 'consumer';
-      }
+      if (isVendor !== (profile.role === 'vendor')) profileUpdates.role = isVendor ? 'vendor' : 'consumer';
       await updateDoc(doc(db, 'users', profile.uid), profileUpdates);
 
       if (isVendor && store) {
         await updateDoc(doc(db, 'stores', store.id), {
-          name: storeName,
-          category: storeCategory,
-          theme: storeTheme,
-          logoUrl: storeLogo,
+          name: storeName, category: storeCategory, theme: storeTheme,
+          logoUrl: storeLogo, location: storeLocation, visibilitySettings: visibility,
         });
       }
 
@@ -2493,6 +2700,14 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
     }
   };
 
+  const visibilityItems: { key: keyof typeof visibility; label: string }[] = [
+    { key: 'members', label: 'Members' },
+    { key: 'stamps', label: 'Stamps Given' },
+    { key: 'activeCards', label: 'Active Cards' },
+    { key: 'returnRate', label: 'Return Rate' },
+    { key: 'followers', label: 'Followers & Following' },
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: '100%' }}
@@ -2502,15 +2717,9 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
       className="fixed inset-0 bg-brand-bg z-[200] flex flex-col max-w-md mx-auto"
     >
       <header className="glass-panel px-6 py-4 flex items-center gap-4">
-        <button onClick={onClose} className="p-2 -ml-2 text-brand-navy/60">
-          <ArrowLeft size={24} />
-        </button>
+        <button onClick={onClose} className="p-2 -ml-2 text-brand-navy/60"><ArrowLeft size={24} /></button>
         <h2 className="font-display text-xl font-bold flex-1">Edit Profile</h2>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="px-5 py-2 bg-brand-navy text-white rounded-2xl font-bold text-sm disabled:opacity-50 active:scale-95 transition-all"
-        >
+        <button onClick={handleSave} disabled={saving} className="px-5 py-2 bg-brand-navy text-white rounded-2xl font-bold text-sm disabled:opacity-50 active:scale-95 transition-all">
           {saved ? 'Saved!' : saving ? 'Saving…' : 'Save'}
         </button>
       </header>
@@ -2532,12 +2741,8 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
         {/* Name */}
         <div className="space-y-2">
           <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Display Name</label>
-          <input
-            value={name}
-            onChange={e => setName(e.target.value)}
-            placeholder="Your name"
-            className="w-full px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
-          />
+          <input value={name} onChange={e => setName(e.target.value)} placeholder="Your name"
+            className="w-full px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30" />
         </div>
 
         {/* Handle */}
@@ -2545,12 +2750,8 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
           <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Handle</label>
           <div className="relative">
             <span className="absolute left-5 top-1/2 -translate-y-1/2 text-brand-navy/40 font-bold text-sm">@</span>
-            <input
-              value={handle}
-              onChange={e => setHandle(e.target.value.toLowerCase().replace(/\s/g, ''))}
-              placeholder="yourhandle"
-              className="w-full pl-9 pr-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
-            />
+            <input value={handle} onChange={e => setHandle(e.target.value.toLowerCase().replace(/\s/g, ''))} placeholder="yourhandle"
+              className="w-full pl-9 pr-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30" />
           </div>
         </div>
 
@@ -2565,68 +2766,46 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
               <p className="text-xs text-brand-navy/40">Enable to manage a loyalty programme</p>
             </div>
           </div>
-          <button
-            onClick={() => setIsVendor(v => !v)}
-            className={cn(
-              "w-12 h-7 rounded-full transition-all relative shrink-0",
-              isVendor ? "bg-green-500" : "bg-brand-navy/20"
-            )}
-          >
-            <span className={cn(
-              "absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all",
-              isVendor ? "left-6" : "left-1"
-            )} />
-          </button>
+          <ToggleSwitch on={isVendor} onChange={setIsVendor} />
         </div>
 
         {/* Business Fields */}
         {isVendor && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-5"
-          >
-            <div className="flex items-center gap-2 px-1">
-              <Building2 size={16} className="text-brand-gold" />
-              <p className="font-bold text-sm text-brand-navy/60 uppercase tracking-widest text-xs">Business Details</p>
-            </div>
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
 
-            {/* Business Name */}
+            <SectionLabel icon={<Building2 size={14} className="text-brand-gold" />} label="Business Details" />
+
             <div className="space-y-2">
               <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Business Name</label>
-              <input
-                value={storeName}
-                onChange={e => setStoreName(e.target.value)}
-                placeholder="Your business name"
-                className="w-full px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
-              />
+              <input value={storeName} onChange={e => setStoreName(e.target.value)} placeholder="Your business name"
+                className="w-full px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30" />
             </div>
 
-            {/* Category */}
             <div className="space-y-2">
               <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Category</label>
               <div className="relative">
-                <select
-                  value={storeCategory}
-                  onChange={e => setStoreCategory(e.target.value as Category)}
-                  className="w-full px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30 appearance-none pr-10"
-                >
+                <select value={storeCategory} onChange={e => setStoreCategory(e.target.value as Category)}
+                  className="w-full px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30 appearance-none pr-10">
                   {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
                 <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-navy/40 pointer-events-none" />
               </div>
             </div>
 
-            {/* Logo URL */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Location</label>
+              <div className="relative">
+                <MapPin size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-navy/30" />
+                <input value={storeLocation} onChange={e => setStoreLocation(e.target.value)} placeholder="123 High Street, London"
+                  className="w-full pl-10 pr-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30" />
+              </div>
+            </div>
+
             <div className="space-y-2">
               <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Logo URL</label>
               <div className="flex gap-3">
-                <input
-                  value={storeLogo}
-                  onChange={e => setStoreLogo(e.target.value)}
-                  placeholder="https://..."
-                  className="flex-1 px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
-                />
+                <input value={storeLogo} onChange={e => setStoreLogo(e.target.value)} placeholder="https://..."
+                  className="flex-1 px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30" />
                 {storeLogo && (
                   <div className="w-14 h-14 rounded-2xl overflow-hidden border border-brand-navy/10 shrink-0">
                     <img src={storeLogo} alt="" className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
@@ -2643,36 +2822,48 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
               </div>
               <div className="grid grid-cols-4 gap-3">
                 {THEME_COLOURS.map(c => (
-                  <button
-                    key={c.value}
-                    onClick={() => setStoreTheme(c.value)}
-                    className={cn(
-                      "h-12 rounded-2xl transition-all active:scale-95 relative",
-                      storeTheme === c.value ? "ring-4 ring-offset-2 ring-brand-navy/30 scale-105" : ""
-                    )}
-                    style={{ backgroundColor: c.value }}
-                  >
-                    {storeTheme === c.value && (
-                      <CheckCircle2 size={16} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white drop-shadow" />
-                    )}
+                  <button key={c.value} onClick={() => setStoreTheme(c.value)}
+                    className={cn("h-12 rounded-2xl transition-all active:scale-95 relative", storeTheme === c.value ? "ring-4 ring-offset-2 ring-brand-navy/30 scale-105" : "")}
+                    style={{ backgroundColor: c.value }}>
+                    {storeTheme === c.value && <CheckCircle2 size={16} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white drop-shadow" />}
                   </button>
                 ))}
               </div>
               <div className="flex items-center gap-3">
                 <label className="text-xs text-brand-navy/40 font-bold">Custom</label>
-                <input
-                  type="color"
-                  value={storeTheme}
-                  onChange={e => setStoreTheme(e.target.value)}
-                  className="w-10 h-10 rounded-xl border border-brand-navy/10 cursor-pointer p-1 bg-white"
-                />
+                <input type="color" value={storeTheme} onChange={e => setStoreTheme(e.target.value)}
+                  className="w-10 h-10 rounded-xl border border-brand-navy/10 cursor-pointer p-1 bg-white" />
                 <span className="text-sm font-mono text-brand-navy/60">{storeTheme}</span>
               </div>
             </div>
+
+            {/* Public Visibility */}
+            <div className="space-y-3">
+              <SectionLabel icon={<Settings size={14} className="text-brand-gold" />} label="Public Visibility" />
+              <p className="text-xs text-brand-navy/40">Choose which stats are visible on your public profile.</p>
+              <div className="space-y-3">
+                {visibilityItems.map(item => (
+                  <div key={item.key} className="flex items-center justify-between bg-white px-5 py-4 rounded-2xl border border-brand-navy/10">
+                    <span className="text-sm font-medium">{item.label}</span>
+                    <ToggleSwitch on={visibility[item.key]} onChange={v => setVisibility(prev => ({ ...prev, [item.key]: v }))} />
+                  </div>
+                ))}
+              </div>
+            </div>
+
           </motion.div>
         )}
       </div>
     </motion.div>
+  );
+}
+
+function SectionLabel({ icon, label }: { icon: React.ReactNode; label: string }) {
+  return (
+    <div className="flex items-center gap-2 px-1 pt-2">
+      {icon}
+      <p className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">{label}</p>
+    </div>
   );
 }
 
