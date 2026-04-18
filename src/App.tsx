@@ -2966,10 +2966,16 @@ function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onLike, o
     setIsCommenting(true);
     const text = newComment.trim();
     try {
+      // Fetch fresh sender profile so name/photo are always accurate
+      const senderSnap = await getDoc(doc(db, 'users', currentUser.uid)).catch(() => null);
+      const senderData = senderSnap?.exists() ? senderSnap.data() : null;
+      const fromName = senderData?.name || currentProfile?.name || currentUser.displayName || 'User';
+      const fromPhoto = senderData?.photoURL || currentProfile?.photoURL || currentUser.photoURL || '';
+
       await addDoc(collection(db, 'global_posts', post.id, 'comments'), {
         fromUid: currentUser.uid,
-        fromName: currentProfile?.name || currentUser.displayName || 'User',
-        fromPhoto: currentProfile?.photoURL || currentUser.photoURL || '',
+        fromName,
+        fromPhoto,
         content: text,
         likesCount: 0,
         likedBy: [],
@@ -2979,8 +2985,8 @@ function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onLike, o
         addDoc(collection(db, 'notifications'), {
           toUid: post.authorUid,
           fromUid: currentUser.uid,
-          fromName: currentProfile?.name || currentUser.displayName || 'Someone',
-          fromPhoto: currentProfile?.photoURL || currentUser.photoURL || '',
+          fromName,
+          fromPhoto,
           type: 'comment',
           message: `commented: "${text.slice(0, 60)}${text.length > 60 ? '…' : ''}"`,
           isRead: false,
@@ -3158,9 +3164,9 @@ function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onLike, o
         </div>
       </div>
 
-      {/* Comments section */}
+      {/* Comments thread — toggled by the chat icon */}
       {(comments.length > 0 || showAllComments) && (
-        <div className="px-5 pb-4 border-t border-black/5 pt-3 space-y-3">
+        <div className="px-5 pb-3 border-t border-black/5 pt-3 space-y-3">
           {visibleComments.map(comment => {
             const commentLiked = currentUser ? (comment.likedBy || []).includes(currentUser.uid) : false;
             return (
@@ -3199,36 +3205,11 @@ function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onLike, o
               {showAllComments ? 'Show less' : `View all ${comments.length} comments`}
             </button>
           )}
-
-          {/* Comment input */}
-          {showAllComments && currentUser && (
-            <div className="flex gap-2 pt-1">
-              <div className="w-7 h-7 rounded-full overflow-hidden border border-black/5 shrink-0">
-                <img src={currentProfile?.photoURL || currentUser.photoURL || `https://i.pravatar.cc/28?u=${currentUser.uid}`} alt="" className="w-full h-full object-cover" />
-              </div>
-              <div className="flex-1 flex gap-2">
-                <input
-                  value={newComment}
-                  onChange={e => setNewComment(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmitComment(); } }}
-                  placeholder="Add a comment…"
-                  className="flex-1 bg-brand-bg rounded-2xl px-3 py-2 text-xs border-none focus:outline-none focus:ring-2 focus:ring-brand-gold/20"
-                />
-                <button
-                  onClick={handleSubmitComment}
-                  disabled={!newComment.trim() || isCommenting}
-                  className="w-8 h-8 rounded-xl bg-brand-gold text-white flex items-center justify-center disabled:opacity-40 transition-opacity shrink-0"
-                >
-                  <Send size={13} />
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Comment input always visible at bottom when no comments yet */}
-      {comments.length === 0 && !showAllComments && currentUser && (
+      {/* Comment input — always visible for logged-in users */}
+      {currentUser && (
         <div className="px-5 pb-4 border-t border-black/5 pt-3 flex gap-2">
           <div className="w-7 h-7 rounded-full overflow-hidden border border-black/5 shrink-0">
             <img src={currentProfile?.photoURL || currentUser.photoURL || `https://i.pravatar.cc/28?u=${currentUser.uid}`} alt="" className="w-full h-full object-cover" />
@@ -3475,15 +3456,18 @@ function ForYouScreen({ onViewUser, onViewStore, notifications, currentUser, cur
       likesCount: alreadyLiked ? Math.max(0, post.likesCount - 1) : post.likesCount + 1
     });
     if (!alreadyLiked && post.authorUid !== currentUser.uid) {
-      const senderName = currentProfile?.name || currentUser.displayName || 'Someone';
-      const senderPhoto = currentProfile?.photoURL || currentUser.photoURL || '';
+      // Fetch fresh profile to avoid stale/null currentProfile
+      const senderSnap = await getDoc(doc(db, 'users', currentUser.uid)).catch(() => null);
+      const senderData = senderSnap?.exists() ? senderSnap.data() : null;
+      const senderName = senderData?.name || currentProfile?.name || currentUser.displayName || 'Someone';
+      const senderPhoto = senderData?.photoURL || currentProfile?.photoURL || currentUser.photoURL || '';
       addDoc(collection(db, 'notifications'), {
         toUid: post.authorUid,
         fromUid: currentUser.uid,
         fromName: senderName,
         fromPhoto: senderPhoto,
         type: 'like',
-        message: `liked your post`,
+        message: 'liked your post',
         isRead: false,
         createdAt: serverTimestamp(),
       }).catch(() => {});
