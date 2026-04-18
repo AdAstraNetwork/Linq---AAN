@@ -272,6 +272,22 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<string>('for-you');
   const [viewingStore, setViewingStore] = useState<StoreProfile | null>(null);
   const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
+
+  // If the target user is a vendor, go straight to their store instead of their user profile
+  const handleViewUser = async (targetUser: UserProfile) => {
+    if (targetUser.role === 'vendor') {
+      try {
+        const q = query(collection(db, 'stores'), where('ownerUid', '==', targetUser.uid));
+        const snap = await getDocs(q);
+        if (!snap.empty) {
+          setViewingStore({ id: snap.docs[0].id, ...snap.docs[0].data() } as StoreProfile);
+          setViewingUser(null);
+          return;
+        }
+      } catch { /* fall through to user profile */ }
+    }
+    setViewingUser(targetUser);
+  };
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [userCards, setUserCards] = useState<Card[]>([]);
   const [showSettings, setShowSettings] = useState(false);
@@ -621,7 +637,7 @@ export default function App() {
               onBack={() => setViewingStore(null)}
               user={user}
               profile={profile}
-              onViewUser={setViewingUser}
+              onViewUser={handleViewUser}
               onMessage={(chatId) => {
                 setActiveChatId(chatId);
                 setActiveTab('messages');
@@ -653,7 +669,7 @@ export default function App() {
               profile={profile} 
               user={user} 
               onViewStore={setViewingStore}
-              onViewUser={setViewingUser}
+              onViewUser={handleViewUser}
               cards={userCards}
               notifications={notifications}
               activeChatId={activeChatId}
@@ -666,7 +682,7 @@ export default function App() {
               setActiveTab={setActiveTab} 
               profile={profile} 
               user={user} 
-              onViewUser={setViewingUser}
+              onViewUser={handleViewUser}
               notifications={notifications}
               activeChatId={activeChatId}
               setActiveChatId={setActiveChatId}
@@ -4668,6 +4684,7 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
   const [isPosting, setIsPosting] = useState(false);
   const [card, setCard] = useState<Card | null>(null);
   const [isFollowingStore, setIsFollowingStore] = useState(false);
+  const [allStoreCards, setAllStoreCards] = useState<Card[]>([]);
 
   useEffect(() => {
     const cardId = `${user.uid}_${store.id}`;
@@ -4681,8 +4698,13 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
   }, [user.uid, store.id]);
 
   useEffect(() => {
+    const q = query(collection(db, 'cards'), where('store_id', '==', store.id));
+    return onSnapshot(q, snap => setAllStoreCards(snap.docs.map(d => ({ id: d.id, ...d.data() } as Card))), () => {});
+  }, [store.id]);
+
+  useEffect(() => {
     const q = query(
-      collection(db, 'cards'), 
+      collection(db, 'cards'),
       where('store_id', '==', store.id),
       where('isArchived', '==', false),
       orderBy('current_stamps', 'desc'),
@@ -4782,8 +4804,18 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
     }
   };
 
+  // Public stats (respect visibility settings)
+  const vis = store.visibilitySettings;
+  const stampsReq = store.stamps_required_for_reward || 10;
+  const totalMembers = new Set(allStoreCards.map(c => c.user_id)).size;
+  const totalStampsGiven = allStoreCards.reduce((sum, c) => sum + (c.current_stamps || 0) + ((c.total_completed_cycles || 0) * stampsReq), 0);
+  const activeCards = allStoreCards.filter(c => !c.isArchived).length;
+  const returningUsers = allStoreCards.filter(c => (c.total_completed_cycles || 0) > 0).length;
+  const returnRate = totalMembers > 0 ? Math.round((returningUsers / totalMembers) * 100) : 0;
+  const showStats = vis ? Object.values(vis).some(Boolean) : true;
+
   return (
-    <motion.div 
+    <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: 20 }}
@@ -4806,7 +4838,7 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
               <h2 className="text-2xl font-bold text-white">{store.name}</h2>
               {store.isVerified && <CheckCircle2 size={18} className="text-blue-400" />}
             </div>
-            <p className="text-white/60 text-sm">{store.category} • {store.address}</p>
+            <p className="text-white/60 text-sm">{store.category}{store.location || store.address ? ` • ${store.location || store.address}` : ''}</p>
           </div>
         </div>
         <div className="absolute top-4 right-4 flex gap-2">
@@ -4851,6 +4883,47 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
           >
             Join Program
           </button>
+        </div>
+      )}
+
+      {showStats && (
+        <div className="grid grid-cols-2 gap-3">
+          {(vis?.members !== false) && (
+            <div className="glass-card p-4 rounded-[2rem]">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Users size={13} className="text-brand-gold" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Members</span>
+              </div>
+              <p className="text-2xl font-bold">{totalMembers}</p>
+            </div>
+          )}
+          {(vis?.stamps !== false) && (
+            <div className="glass-card p-4 rounded-[2rem]">
+              <div className="flex items-center gap-1.5 mb-1">
+                <CheckCircle2 size={13} className="text-brand-gold" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Stamps</span>
+              </div>
+              <p className="text-2xl font-bold">{totalStampsGiven}</p>
+            </div>
+          )}
+          {(vis?.activeCards !== false) && (
+            <div className="glass-card p-4 rounded-[2rem]">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Wallet size={13} className="text-brand-gold" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Active Cards</span>
+              </div>
+              <p className="text-2xl font-bold">{activeCards}</p>
+            </div>
+          )}
+          {(vis?.returnRate !== false) && (
+            <div className="glass-card p-4 rounded-[2rem]">
+              <div className="flex items-center gap-1.5 mb-1">
+                <TrendingUp size={13} className="text-brand-gold" />
+                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Return Rate</span>
+              </div>
+              <p className="text-2xl font-bold">{returnRate}<span className="text-base">%</span></p>
+            </div>
+          )}
         </div>
       )}
 
