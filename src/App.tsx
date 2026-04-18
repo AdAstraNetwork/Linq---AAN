@@ -2384,9 +2384,18 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
                         <img src={post.authorPhoto || `https://i.pravatar.cc/40?u=${post.authorUid}`} alt="" className="w-full h-full object-cover" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-sm">
-                          {post.authorName}
-                          <span className="font-normal text-brand-navy/40"> › {vendorStore?.name || profile.name}</span>
+                        <p className="text-sm leading-snug">
+                          <span
+                            className="font-bold cursor-pointer hover:text-brand-gold transition-colors"
+                            onClick={async () => {
+                              const snap = await getDoc(doc(db, 'users', post.authorUid)).catch(() => null);
+                              if (snap?.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile);
+                            }}
+                          >
+                            {post.authorName}
+                          </span>
+                          <span className="text-brand-navy/30 mx-1">›</span>
+                          <span className="font-bold text-brand-gold">{vendorStore?.name || profile.name}</span>
                         </p>
                         <p className="text-[10px] text-brand-navy/40 font-medium">
                           {post.createdAt ? format(post.createdAt.toDate(), 'MMM d · h:mm a') : 'Just now'}
@@ -3494,12 +3503,13 @@ function ProfileLink({ icon, label, onClick }: { icon: React.ReactNode, label: s
 
 // --- Social & Community Components ---
 
-function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onLike, onVote, onDelete }: {
+function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onViewStore, onLike, onVote, onDelete }: {
   key?: React.Key;
   post: GlobalPost;
   currentUser?: FirebaseUser;
   currentProfile?: UserProfile | null;
   onViewUser: (u: UserProfile) => void;
+  onViewStore?: (s: StoreProfile) => void;
   onLike: (post: GlobalPost) => void | Promise<void>;
   onVote: (post: GlobalPost, optionIndex: number) => void | Promise<void>;
   onDelete?: (post: GlobalPost) => void | Promise<void>;
@@ -3611,12 +3621,29 @@ function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onLike, o
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
-              <p className="font-bold text-sm">
-                {authorProfile?.name || post.authorName}
-                {post.wallPost && post.storeName && (
-                  <span className="font-normal text-brand-navy/40"> › {post.storeName}</span>
-                )}
-              </p>
+              {post.wallPost && post.storeName ? (
+                <p className="text-sm leading-snug">
+                  <span
+                    className="font-bold cursor-pointer hover:text-brand-gold transition-colors"
+                    onClick={handleAvatarClick}
+                  >
+                    {authorProfile?.name || post.authorName}
+                  </span>
+                  <span className="text-brand-navy/30 mx-1">›</span>
+                  <span
+                    className="font-bold text-brand-gold cursor-pointer hover:opacity-70 transition-opacity"
+                    onClick={async () => {
+                      if (!post.storeId || !onViewStore) return;
+                      const snap = await getDoc(doc(db, 'stores', post.storeId));
+                      if (snap.exists()) onViewStore({ id: snap.id, ...snap.data() } as StoreProfile);
+                    }}
+                  >
+                    {post.storeName}
+                  </span>
+                </p>
+              ) : (
+                <p className="font-bold text-sm">{authorProfile?.name || post.authorName}</p>
+              )}
               {post.authorRole === 'vendor' && !post.wallPost && (
                 <span className="px-2 py-0.5 bg-brand-gold/10 rounded-full text-[9px] font-bold text-brand-gold uppercase tracking-wide">Vendor</span>
               )}
@@ -4259,6 +4286,7 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile }: 
                   currentUser={currentUser}
                   currentProfile={currentProfile}
                   onViewUser={onViewUser}
+                  onViewStore={onViewStore}
                   onLike={handleLike}
                   onVote={handleVote}
                   onDelete={async (p) => { await deleteDoc(doc(db, 'global_posts', p.id)); }}
@@ -5236,18 +5264,18 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
                   <img src={post.authorPhoto} alt="" className="w-full h-full object-cover" />
                 </div>
                 <div>
-                  <p
-                    className="font-bold text-sm cursor-pointer hover:text-brand-gold transition-colors"
-                    onClick={async () => {
-                      const uq = query(collection(db, 'users'), where('uid', '==', post.authorUid));
-                      const usnap = await getDocs(uq);
-                      if (!usnap.empty) {
-                        onViewUser({ uid: usnap.docs[0].id, ...usnap.docs[0].data() } as UserProfile);
-                      }
-                    }}
-                  >
-                    {post.authorName}
-                    <span className="font-normal text-brand-navy/40"> › {store.name}</span>
+                  <p className="text-sm leading-snug">
+                    <span
+                      className="font-bold cursor-pointer hover:text-brand-gold transition-colors"
+                      onClick={async () => {
+                        const snap = await getDoc(doc(db, 'users', post.authorUid)).catch(() => null);
+                        if (snap?.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile);
+                      }}
+                    >
+                      {post.authorName}
+                    </span>
+                    <span className="text-brand-navy/30 mx-1">›</span>
+                    <span className="font-bold text-brand-gold">{store.name}</span>
                   </p>
                   <p className="text-[10px] text-brand-navy/40 font-bold uppercase tracking-widest">
                     {post.createdAt ? format(post.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}
