@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   onAuthStateChanged, 
   signInWithPopup, 
@@ -180,7 +180,7 @@ interface Notification {
   fromUid: string;
   fromName: string;
   fromPhoto: string;
-  type: 'follow' | 'system' | 'like' | 'comment';
+  type: 'follow' | 'system' | 'like' | 'comment' | 'message';
   message: string;
   isRead: boolean;
   createdAt: any;
@@ -602,13 +602,18 @@ export default function App() {
       <main className="px-6 py-8">
         <AnimatePresence mode="wait">
           {viewingStore ? (
-            <StoreProfileView 
-              key="store-profile" 
-              store={viewingStore} 
-              onBack={() => setViewingStore(null)} 
+            <StoreProfileView
+              key="store-profile"
+              store={viewingStore}
+              onBack={() => setViewingStore(null)}
               user={user}
               profile={profile}
               onViewUser={setViewingUser}
+              onMessage={(chatId) => {
+                setActiveChatId(chatId);
+                setActiveTab('messages');
+                setViewingStore(null);
+              }}
             />
           ) : viewingUser ? (
             <PublicUserProfile 
@@ -1100,12 +1105,13 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
       )}
 
       {activeTab === 'messages' && (
-        <MessagesScreen 
-          currentUser={user} 
-          currentProfile={profile} 
-          activeChatId={activeChatId} 
+        <MessagesScreen
+          currentUser={user}
+          currentProfile={profile}
+          activeChatId={activeChatId}
           setActiveChatId={setActiveChatId}
           onViewUser={onViewUser}
+          vendorStore={store}
         />
       )}
 
@@ -3469,8 +3475,8 @@ function NotificationsPanel({ notifications, onClose }: { notifications: Notific
                 ) : (
                   <Sparkles size={18} className="text-brand-gold" />
                 )}
-                <div className={cn("absolute -bottom-1 -right-1 p-1 rounded-md border-2 border-white", notif.type === 'like' ? "bg-red-400" : notif.type === 'comment' ? "bg-blue-400" : "bg-brand-gold")}>
-                  {notif.type === 'follow' ? <UserPlus size={9} className="text-white" /> : notif.type === 'like' ? <Heart size={9} className="text-white fill-white" /> : notif.type === 'comment' ? <MessageCircle size={9} className="text-white" /> : <Bell size={9} className="text-white" />}
+                <div className={cn("absolute -bottom-1 -right-1 p-1 rounded-md border-2 border-white", notif.type === 'like' ? "bg-red-400" : notif.type === 'comment' ? "bg-blue-400" : notif.type === 'message' ? "bg-brand-navy" : "bg-brand-gold")}>
+                  {notif.type === 'follow' ? <UserPlus size={9} className="text-white" /> : notif.type === 'like' ? <Heart size={9} className="text-white fill-white" /> : notif.type === 'comment' || notif.type === 'message' ? <MessageCircle size={9} className="text-white" /> : <Bell size={9} className="text-white" />}
                 </div>
               </div>
               <div className="flex-1 min-w-0">
@@ -3677,12 +3683,15 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile }: 
   );
 }
 
-function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveChatId, onViewUser }: { currentUser: FirebaseUser, currentProfile: UserProfile | null, activeChatId: string | null, setActiveChatId: (id: string | null) => void, onViewUser: (u: UserProfile) => void }) {
+function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveChatId, onViewUser, vendorStore }: { currentUser: FirebaseUser, currentProfile: UserProfile | null, activeChatId: string | null, setActiveChatId: (id: string | null) => void, onViewUser: (u: UserProfile) => void, vendorStore?: StoreProfile | null }) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [chatPartner, setChatPartner] = useState<UserProfile | null>(null);
   const [selectedMsgId, setSelectedMsgId] = useState<string | null>(null);
+  const [showCustomerPicker, setShowCustomerPicker] = useState(false);
+  const [storeCustomers, setStoreCustomers] = useState<UserProfile[]>([]);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const q = query(
@@ -3702,14 +3711,25 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
       return;
     }
 
-    // Fetch partner directly from Firestore — don't depend on chats state (async race)
-    getDoc(doc(db, 'chats', activeChatId)).then(async (chatSnap) => {
-      if (!chatSnap.exists()) return;
-      const partnerUid = (chatSnap.data().uids as string[]).find(id => id !== currentUser.uid);
-      if (!partnerUid) return;
-      const userSnap = await getDoc(doc(db, 'users', partnerUid));
-      if (userSnap.exists()) setChatPartner({ uid: userSnap.id, ...userSnap.data() } as UserProfile);
-    });
+    // Fetch partner — poll briefly if doc not yet created (race with background creation)
+    const loadPartner = async (retries = 5) => {
+      try {
+        const chatSnap = await getDoc(doc(db, 'chats', activeChatId));
+        if (!chatSnap.exists()) {
+          if (retries > 0) { setTimeout(() => loadPartner(retries - 1), 600); }
+          return;
+        }
+        const partnerUid = (chatSnap.data().uids as string[]).find(id => id !== currentUser.uid);
+        if (!partnerUid) return;
+        const userSnap = await getDoc(doc(db, 'users', partnerUid));
+        if (userSnap.exists()) setChatPartner({ uid: userSnap.id, ...userSnap.data() } as UserProfile);
+        const unreadCount = chatSnap.data().unreadCount || {};
+        if (unreadCount[currentUser.uid]) {
+          updateDoc(doc(db, 'chats', activeChatId), { [`unreadCount.${currentUser.uid}`]: 0 }).catch(() => {});
+        }
+      } catch { /* ignore permission errors on retry */ }
+    };
+    loadPartner();
 
     const q = query(
       collection(db, 'chats', activeChatId, 'messages'),
@@ -3719,6 +3739,49 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
       setMessages(snap.docs.map(d => ({ id: d.id, ...d.data() } as ChatMessage)));
     });
   }, [activeChatId, currentUser.uid]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    if (!vendorStore) return;
+    const q = query(
+      collection(db, 'cards'),
+      where('store_id', '==', vendorStore.id),
+      where('isArchived', '==', false)
+    );
+    const unsub = onSnapshot(q, async (snap) => {
+      const userIds = [...new Set(snap.docs.map(d => d.data().user_id as string))];
+      const profiles = await Promise.all(
+        userIds.map(uid => getDoc(doc(db, 'users', uid)).then(s => s.exists() ? { uid: s.id, ...s.data() } as UserProfile : null))
+      );
+      setStoreCustomers(profiles.filter(Boolean) as UserProfile[]);
+    });
+    return unsub;
+  }, [vendorStore]);
+
+  const handleStartCustomerChat = async (customer: UserProfile) => {
+    const chatId = [currentUser.uid, customer.uid].sort().join('_');
+    // Navigate immediately
+    setShowCustomerPicker(false);
+    setActiveChatId(chatId);
+    // Create chat doc in background if needed
+    try {
+      const chatRef = doc(db, 'chats', chatId);
+      const chatSnap = await getDoc(chatRef);
+      if (!chatSnap.exists()) {
+        await setDoc(chatRef, {
+          uids: [currentUser.uid, customer.uid],
+          lastActivity: serverTimestamp(),
+          lastMessage: '',
+          createdAt: serverTimestamp()
+        });
+      }
+    } catch (err) {
+      console.error('Chat create error:', err);
+    }
+  };
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !activeChatId) return;
@@ -3736,13 +3799,14 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
       
       await addDoc(collection(db, 'chats', activeChatId, 'messages'), messageData);
       
+      const partnerUid = chatPartner?.uid;
       await updateDoc(doc(db, 'chats', activeChatId), {
         lastMessage: text,
-        lastActivity: serverTimestamp()
+        lastActivity: serverTimestamp(),
+        ...(partnerUid ? { [`unreadCount.${partnerUid}`]: increment(1) } : {})
       });
 
       // Send notification to partner
-      const partnerUid = chatPartner?.uid;
       if (partnerUid) {
         await addDoc(collection(db, 'notifications'), {
           toUid: partnerUid,
@@ -3765,7 +3829,7 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
       <motion.div 
         initial={{ opacity: 0, x: 20 }}
         animate={{ opacity: 1, x: 0 }}
-        className="fixed inset-0 bg-brand-bg z-[100] flex flex-col max-w-md mx-auto"
+        className="fixed inset-0 bg-brand-bg z-[100] flex flex-col"
       >
         <header className="glass-panel px-6 py-4 flex items-center gap-4">
           <button onClick={() => setActiveChatId(null)} className="p-2 -ml-2 text-brand-navy/60">
@@ -3785,20 +3849,20 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
           </button>
         </header>
 
-        <div className="flex-1 overflow-y-auto px-6 py-8 space-y-4" onClick={() => setSelectedMsgId(null)}>
+        <div className="flex-1 overflow-y-auto px-4 py-8 space-y-2" onClick={() => setSelectedMsgId(null)}>
           {messages.map((msg, idx) => {
             const isMe = msg.senderUid === currentUser.uid;
             const showName = idx === 0 || messages[idx-1].senderUid !== msg.senderUid;
             const isSelected = selectedMsgId === msg.id;
             return (
-              <div key={msg.id} className={cn("flex flex-col", isMe ? "items-end" : "items-start")}>
-                {showName && !isMe && <span className="text-[10px] font-bold text-brand-navy/40 mb-1 ml-2">{msg.senderName}</span>}
+              <div key={msg.id} className="w-full">
+                {showName && !isMe && <span className="text-[10px] font-bold text-brand-navy/40 mb-1 ml-2 block">{msg.senderName}</span>}
                 <div
                   className={cn("flex items-end gap-2", isMe ? "flex-row-reverse" : "flex-row")}
                   onClick={e => { e.stopPropagation(); if (isMe) setSelectedMsgId(isSelected ? null : msg.id); }}
                 >
                   <div className={cn(
-                    "max-w-[75%] px-4 py-3 rounded-3xl text-sm shadow-sm",
+                    "flex-1 px-4 py-3 rounded-3xl text-sm shadow-sm",
                     isMe ? "bg-brand-navy text-white rounded-tr-none" : "glass-card text-brand-navy rounded-tl-none"
                   )}>
                     {msg.text}
@@ -3824,6 +3888,7 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
               </div>
             );
           })}
+          <div ref={messagesEndRef} />
         </div>
 
         <div className="p-6 bg-white border-t border-brand-navy/5">
@@ -3848,25 +3913,73 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
     );
   }
 
+  if (showCustomerPicker && vendorStore) {
+    return (
+      <div className="space-y-6">
+        <header className="flex items-center gap-4">
+          <button onClick={() => setShowCustomerPicker(false)} className="p-2 -ml-2 text-brand-navy/60">
+            <ArrowLeft size={24} />
+          </button>
+          <div>
+            <h2 className="font-display text-2xl font-bold">Message a Customer</h2>
+            <p className="text-brand-navy/60 text-sm">{storeCustomers.length} active cardholders</p>
+          </div>
+        </header>
+        <div className="space-y-3">
+          {storeCustomers.length === 0 && (
+            <div className="glass-card p-10 rounded-[2.5rem] text-center">
+              <p className="text-brand-navy/60 font-bold">No customers yet</p>
+              <p className="text-xs text-brand-navy/40 mt-1">Customers will appear here once they join your loyalty program.</p>
+            </div>
+          )}
+          {storeCustomers.map(customer => (
+            <button
+              key={customer.uid}
+              onClick={() => handleStartCustomerChat(customer)}
+              className="w-full bg-white p-4 rounded-2xl flex items-center gap-4 border border-brand-navy/5 hover:border-brand-gold/20 transition-all text-left"
+            >
+              <div className="w-14 h-14 rounded-2xl overflow-hidden border border-brand-navy/5">
+                <img src={customer.photoURL} alt="" className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <h4 className="font-bold text-sm truncate">{customer.name}</h4>
+                <p className="text-xs text-brand-navy/40">{customer.email}</p>
+              </div>
+              <MessageCircle size={18} className="text-brand-navy/20 shrink-0" />
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
-      <header>
-        <h2 className="font-display text-3xl font-bold mb-1">Messages</h2>
-        <p className="text-brand-navy/60 text-sm">Direct conversations with others.</p>
+      <header className="flex items-center justify-between">
+        <div>
+          <h2 className="font-display text-3xl font-bold mb-1">Messages</h2>
+          <p className="text-brand-navy/60 text-sm">Direct conversations with others.</p>
+        </div>
+        {vendorStore && (
+          <button
+            onClick={() => setShowCustomerPicker(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-brand-navy text-white rounded-2xl text-xs font-bold shadow-lg active:scale-95 transition-all"
+          >
+            <MessageCircle size={14} />
+            New
+          </button>
+        )}
       </header>
 
       <div className="space-y-3">
-        {chats.map(chat => {
-          const partnerUid = chat.uids.find(id => id !== currentUser.uid);
-          return (
-            <ChatListItem 
-              key={chat.id} 
-              chat={chat} 
-              currentUser={currentUser} 
-              onClick={() => setActiveChatId(chat.id)} 
-            />
-          );
-        })}
+        {chats.map(chat => (
+          <ChatListItem
+            key={chat.id}
+            chat={chat}
+            currentUser={currentUser}
+            onClick={() => setActiveChatId(chat.id)}
+          />
+        ))}
 
         {chats.length === 0 && (
           <div className="glass-card p-10 rounded-[2.5rem] border-2 border-dashed border-brand-rose/40 text-center">
@@ -3874,7 +3987,9 @@ function MessagesScreen({ currentUser, currentProfile, activeChatId, setActiveCh
               <MessageCircle className="w-8 h-8 text-brand-navy/20" />
             </div>
             <p className="text-brand-navy/60 mb-2 font-bold">No conversations</p>
-            <p className="text-xs text-brand-navy/40">Start a message from someone's profile!</p>
+            <p className="text-xs text-brand-navy/40">
+              {vendorStore ? 'Tap "New" to message a customer.' : "Start a message from someone's profile!"}
+            </p>
           </div>
         )}
       </div>
@@ -4077,7 +4192,7 @@ function CommunityScreen({ onViewUser, currentUser }: { onViewUser: (u: UserProf
   );
 }
 
-function StoreProfileView({ store, onBack, user, profile, onViewUser }: { store: StoreProfile, onBack: () => void, user: FirebaseUser, profile: UserProfile | null, onViewUser: (u: UserProfile) => void, key?: React.Key }) {
+function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage }: { store: StoreProfile, onBack: () => void, user: FirebaseUser, profile: UserProfile | null, onViewUser: (u: UserProfile) => void, onMessage?: (chatId: string) => void, key?: React.Key }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [newPost, setNewPost] = useState('');
@@ -4135,6 +4250,28 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser }: { store:
         storeId: store.id,
         createdAt: serverTimestamp(),
       });
+    }
+  };
+
+  const handleMessageStore = async () => {
+    if (!onMessage || !store.ownerUid || store.ownerUid === user.uid) return;
+    const chatId = [user.uid, store.ownerUid].sort().join('_');
+    // Navigate immediately — don't block on Firestore
+    onMessage(chatId);
+    // Create chat doc in background if it doesn't exist
+    try {
+      const chatRef = doc(db, 'chats', chatId);
+      const chatSnap = await getDoc(chatRef);
+      if (!chatSnap.exists()) {
+        await setDoc(chatRef, {
+          uids: [user.uid, store.ownerUid],
+          lastActivity: serverTimestamp(),
+          lastMessage: '',
+          createdAt: serverTimestamp()
+        });
+      }
+    } catch (err) {
+      console.error('Chat create error:', err);
     }
   };
 
@@ -4203,18 +4340,29 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser }: { store:
             <p className="text-white/60 text-sm">{store.category} • {store.address}</p>
           </div>
         </div>
-        <button
-          onClick={handleFollowStore}
-          className={cn(
-            "absolute top-4 right-4 flex items-center gap-1.5 px-4 py-2 rounded-2xl font-bold text-xs transition-all shadow-lg active:scale-95",
-            isFollowingStore
-              ? "bg-white/20 text-white border border-white/30 hover:bg-red-500/30"
-              : "bg-brand-gold text-brand-navy hover:bg-brand-gold/80"
+        <div className="absolute top-4 right-4 flex gap-2">
+          {onMessage && store.ownerUid && store.ownerUid !== user.uid && (
+            <button
+              onClick={handleMessageStore}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-2xl bg-white/90 text-brand-navy font-bold text-xs shadow-lg active:scale-95 transition-all"
+            >
+              <MessageCircle size={14} />
+              Message
+            </button>
           )}
-        >
-          {isFollowingStore ? <UserCheck size={14} /> : <UserPlus size={14} />}
-          {isFollowingStore ? 'Following' : 'Follow'}
-        </button>
+          <button
+            onClick={handleFollowStore}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 rounded-2xl font-bold text-xs transition-all shadow-lg active:scale-95",
+              isFollowingStore
+                ? "bg-white/20 text-white border border-white/30 hover:bg-red-500/30"
+                : "bg-brand-gold text-brand-navy hover:bg-brand-gold/80"
+            )}
+          >
+            {isFollowingStore ? <UserCheck size={14} /> : <UserPlus size={14} />}
+            {isFollowingStore ? 'Following' : 'Follow'}
+          </button>
+        </div>
       </div>
 
       {card ? (
@@ -4449,19 +4597,23 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
 
   const handleMessageClick = async () => {
     const chatId = [currentUser.uid, targetUser.uid].sort().join('_');
-    const chatRef = doc(db, 'chats', chatId);
-    const chatSnap = await getDoc(chatRef);
-    
-    if (!chatSnap.exists()) {
-      await setDoc(chatRef, {
-        uids: [currentUser.uid, targetUser.uid],
-        lastActivity: serverTimestamp(),
-        lastMessage: '',
-        createdAt: serverTimestamp()
-      });
-    }
-    
+    // Navigate immediately — don't block on Firestore
     if (onMessage) onMessage(chatId);
+    // Create chat doc in background if it doesn't exist
+    try {
+      const chatRef = doc(db, 'chats', chatId);
+      const chatSnap = await getDoc(chatRef);
+      if (!chatSnap.exists()) {
+        await setDoc(chatRef, {
+          uids: [currentUser.uid, targetUser.uid],
+          lastActivity: serverTimestamp(),
+          lastMessage: '',
+          createdAt: serverTimestamp()
+        });
+      }
+    } catch (err) {
+      console.error('Chat create error:', err);
+    }
   };
 
   const handleFollowClick = async () => {
