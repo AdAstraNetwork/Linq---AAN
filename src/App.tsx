@@ -74,7 +74,10 @@ import {
   BarChart2,
   Image,
   Flag,
-  ChevronDown
+  ChevronDown,
+  Palette,
+  Building2,
+  Edit3
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
@@ -140,6 +143,7 @@ type Category = 'Food' | 'Beauty' | 'Barber' | 'Gym' | 'Parking' | 'Retail';
 interface UserProfile {
   uid: string;
   name: string;
+  handle?: string;
   email: string;
   photoURL: string;
   role: UserRole;
@@ -161,6 +165,7 @@ interface StoreProfile {
   description: string;
   isVerified: boolean;
   stamps_required_for_reward: number;
+  theme?: string;
 }
 
 interface Card {
@@ -2064,6 +2069,7 @@ function CardBuilder({ store }: { store: StoreProfile | null }) {
 
 function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { profile: UserProfile | null, userCards: Card[], onLogout: () => void, onViewUser: (u: UserProfile) => void, user: FirebaseUser }) {
   const [activeSubTab, setActiveSubTab] = useState<'posts' | 'interactions'>('posts');
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [following, setFollowing] = useState<UserProfile[]>([]);
   const [followers, setFollowers] = useState<UserProfile[]>([]);
   const [showFollowModal, setShowFollowModal] = useState(false);
@@ -2164,12 +2170,28 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
   return (
     <div className="space-y-6 pb-20 text-brand-navy">
       <header className="text-center relative">
+        <button
+          onClick={() => setShowProfileSettings(true)}
+          className="absolute right-0 top-0 p-2 rounded-2xl bg-white border border-brand-navy/10 shadow-sm active:scale-95 transition-all"
+        >
+          <Settings size={18} className="text-brand-navy/60" />
+        </button>
         <div className="w-32 h-32 rounded-[2.5rem] overflow-hidden border-4 border-white mx-auto mb-4 shadow-xl">
           <img src={profile.photoURL} alt="" className="w-full h-full object-cover" />
         </div>
         <h2 className="font-display text-3xl font-bold">{profile.name}</h2>
-        <p className="text-brand-gold font-bold text-xs uppercase tracking-[0.2em]">@{user.email?.split('@')[0]}</p>
+        <p className="text-brand-gold font-bold text-xs uppercase tracking-[0.2em]">@{profile.handle || user.email?.split('@')[0]}</p>
       </header>
+
+      <AnimatePresence>
+        {showProfileSettings && (
+          <ProfileSettingsModal
+            profile={profile}
+            user={user}
+            onClose={() => setShowProfileSettings(false)}
+          />
+        )}
+      </AnimatePresence>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <StatSquare icon={<CheckCircle2 className="text-brand-gold" />} label="Stamps" value={totalStamps.toString()} />
@@ -2399,12 +2421,267 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
   );
 }
 
-function SettingsMenu({ 
-  isOpen, 
-  onClose, 
-  profile, 
-  onLogout, 
-  userCards 
+const THEME_COLOURS = [
+  { label: 'Navy',   value: '#1e3a5f' },
+  { label: 'Gold',   value: '#f59e0b' },
+  { label: 'Rose',   value: '#f43f5e' },
+  { label: 'Green',  value: '#10b981' },
+  { label: 'Purple', value: '#8b5cf6' },
+  { label: 'Blue',   value: '#3b82f6' },
+  { label: 'Orange', value: '#f97316' },
+  { label: 'Teal',   value: '#14b8a6' },
+];
+
+const CATEGORIES: Category[] = ['Food', 'Beauty', 'Barber', 'Gym', 'Parking', 'Retail'];
+
+function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile, user: FirebaseUser, onClose: () => void }) {
+  const [name, setName] = useState(profile.name || '');
+  const [handle, setHandle] = useState(profile.handle || user.email?.split('@')[0] || '');
+  const [isVendor, setIsVendor] = useState(profile.role === 'vendor');
+  const [store, setStore] = useState<StoreProfile | null>(null);
+  const [storeName, setStoreName] = useState('');
+  const [storeCategory, setStoreCategory] = useState<Category>('Food');
+  const [storeTheme, setStoreTheme] = useState('#1e3a5f');
+  const [storeLogo, setStoreLogo] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (profile.role !== 'vendor') return;
+    const q = query(collection(db, 'stores'), where('ownerUid', '==', profile.uid));
+    const unsub = onSnapshot(q, (snap) => {
+      if (!snap.empty) {
+        const s = { id: snap.docs[0].id, ...snap.docs[0].data() } as StoreProfile;
+        setStore(s);
+        setStoreName(s.name || '');
+        setStoreCategory(s.category || 'Food');
+        setStoreTheme(s.theme || '#1e3a5f');
+        setStoreLogo(s.logoUrl || '');
+      }
+    });
+    return unsub;
+  }, [profile.uid, profile.role]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const profileUpdates: any = { name, handle };
+      if (isVendor !== (profile.role === 'vendor')) {
+        profileUpdates.role = isVendor ? 'vendor' : 'consumer';
+      }
+      await updateDoc(doc(db, 'users', profile.uid), profileUpdates);
+
+      if (isVendor && store) {
+        await updateDoc(doc(db, 'stores', store.id), {
+          name: storeName,
+          category: storeCategory,
+          theme: storeTheme,
+          logoUrl: storeLogo,
+        });
+      }
+
+      setSaved(true);
+      setTimeout(() => {
+        setSaved(false);
+        if (isVendor !== (profile.role === 'vendor')) window.location.reload();
+        else onClose();
+      }, 1000);
+    } catch (err) {
+      console.error('Save profile error:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: '100%' }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: '100%' }}
+      transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+      className="fixed inset-0 bg-brand-bg z-[200] flex flex-col max-w-md mx-auto"
+    >
+      <header className="glass-panel px-6 py-4 flex items-center gap-4">
+        <button onClick={onClose} className="p-2 -ml-2 text-brand-navy/60">
+          <ArrowLeft size={24} />
+        </button>
+        <h2 className="font-display text-xl font-bold flex-1">Edit Profile</h2>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="px-5 py-2 bg-brand-navy text-white rounded-2xl font-bold text-sm disabled:opacity-50 active:scale-95 transition-all"
+        >
+          {saved ? 'Saved!' : saving ? 'Saving…' : 'Save'}
+        </button>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-6 py-6 space-y-6 pb-12">
+
+        {/* Avatar */}
+        <div className="flex justify-center">
+          <div className="relative">
+            <div className="w-24 h-24 rounded-[2rem] overflow-hidden border-4 border-white shadow-xl">
+              <img src={profile.photoURL} alt="" className="w-full h-full object-cover" />
+            </div>
+            <div className="absolute -bottom-2 -right-2 w-8 h-8 bg-brand-gold rounded-xl flex items-center justify-center shadow">
+              <Edit3 size={14} className="text-brand-navy" />
+            </div>
+          </div>
+        </div>
+
+        {/* Name */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Display Name</label>
+          <input
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Your name"
+            className="w-full px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
+          />
+        </div>
+
+        {/* Handle */}
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Handle</label>
+          <div className="relative">
+            <span className="absolute left-5 top-1/2 -translate-y-1/2 text-brand-navy/40 font-bold text-sm">@</span>
+            <input
+              value={handle}
+              onChange={e => setHandle(e.target.value.toLowerCase().replace(/\s/g, ''))}
+              placeholder="yourhandle"
+              className="w-full pl-9 pr-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
+            />
+          </div>
+        </div>
+
+        {/* Business Toggle */}
+        <div className="glass-card p-5 rounded-[2rem] flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-brand-navy/5 flex items-center justify-center">
+              <Building2 size={20} className="text-brand-navy" />
+            </div>
+            <div>
+              <p className="font-bold text-sm">Business Account</p>
+              <p className="text-xs text-brand-navy/40">Enable to manage a loyalty programme</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsVendor(v => !v)}
+            className={cn(
+              "w-12 h-7 rounded-full transition-all relative shrink-0",
+              isVendor ? "bg-green-500" : "bg-brand-navy/20"
+            )}
+          >
+            <span className={cn(
+              "absolute top-1 w-5 h-5 bg-white rounded-full shadow transition-all",
+              isVendor ? "left-6" : "left-1"
+            )} />
+          </button>
+        </div>
+
+        {/* Business Fields */}
+        {isVendor && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-5"
+          >
+            <div className="flex items-center gap-2 px-1">
+              <Building2 size={16} className="text-brand-gold" />
+              <p className="font-bold text-sm text-brand-navy/60 uppercase tracking-widest text-xs">Business Details</p>
+            </div>
+
+            {/* Business Name */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Business Name</label>
+              <input
+                value={storeName}
+                onChange={e => setStoreName(e.target.value)}
+                placeholder="Your business name"
+                className="w-full px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
+              />
+            </div>
+
+            {/* Category */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Category</label>
+              <div className="relative">
+                <select
+                  value={storeCategory}
+                  onChange={e => setStoreCategory(e.target.value as Category)}
+                  className="w-full px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30 appearance-none pr-10"
+                >
+                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-navy/40 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Logo URL */}
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Logo URL</label>
+              <div className="flex gap-3">
+                <input
+                  value={storeLogo}
+                  onChange={e => setStoreLogo(e.target.value)}
+                  placeholder="https://..."
+                  className="flex-1 px-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
+                />
+                {storeLogo && (
+                  <div className="w-14 h-14 rounded-2xl overflow-hidden border border-brand-navy/10 shrink-0">
+                    <img src={storeLogo} alt="" className="w-full h-full object-cover" onError={e => (e.currentTarget.style.display = 'none')} />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Colour Theme */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Brand Colour</label>
+                <Palette size={13} className="text-brand-navy/30" />
+              </div>
+              <div className="grid grid-cols-4 gap-3">
+                {THEME_COLOURS.map(c => (
+                  <button
+                    key={c.value}
+                    onClick={() => setStoreTheme(c.value)}
+                    className={cn(
+                      "h-12 rounded-2xl transition-all active:scale-95 relative",
+                      storeTheme === c.value ? "ring-4 ring-offset-2 ring-brand-navy/30 scale-105" : ""
+                    )}
+                    style={{ backgroundColor: c.value }}
+                  >
+                    {storeTheme === c.value && (
+                      <CheckCircle2 size={16} className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white drop-shadow" />
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-3">
+                <label className="text-xs text-brand-navy/40 font-bold">Custom</label>
+                <input
+                  type="color"
+                  value={storeTheme}
+                  onChange={e => setStoreTheme(e.target.value)}
+                  className="w-10 h-10 rounded-xl border border-brand-navy/10 cursor-pointer p-1 bg-white"
+                />
+                <span className="text-sm font-mono text-brand-navy/60">{storeTheme}</span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+function SettingsMenu({
+  isOpen,
+  onClose,
+  profile,
+  onLogout,
+  userCards
 }: { 
   isOpen: boolean, 
   onClose: () => void, 
