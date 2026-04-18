@@ -1984,12 +1984,14 @@ function CardBuilder({ store }: { store: StoreProfile | null }) {
 }
 
 function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { profile: UserProfile | null, userCards: Card[], onLogout: () => void, onViewUser: (u: UserProfile) => void, user: FirebaseUser }) {
-  const [activeSubTab, setActiveSubTab] = useState<'posts' | 'wall' | 'following'>('posts');
+  const [activeSubTab, setActiveSubTab] = useState<'posts' | 'interactions'>('posts');
   const [following, setFollowing] = useState<UserProfile[]>([]);
   const [followers, setFollowers] = useState<UserProfile[]>([]);
   const [showFollowModal, setShowFollowModal] = useState(false);
-  const [posts, setPosts] = useState<any[]>([]);
+  const [wallPosts, setWallPosts] = useState<any[]>([]);
   const [myGlobalPosts, setMyGlobalPosts] = useState<GlobalPost[]>([]);
+  const [likedPosts, setLikedPosts] = useState<GlobalPost[]>([]);
+  const [allPostsForVotes, setAllPostsForVotes] = useState<GlobalPost[]>([]);
   const [newPost, setNewPost] = useState('');
   const [rating, setRating] = useState(5);
   const [isPosting, setIsPosting] = useState(false);
@@ -2020,8 +2022,8 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
     );
 
     const pq = query(collection(db, 'user_reviews'), where('toUid', '==', profile.uid), orderBy('createdAt', 'desc'));
-    const unsubPosts = onSnapshot(pq, (snap) => {
-      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubWall = onSnapshot(pq, (snap) => {
+      setWallPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     });
 
     const gq = query(collection(db, 'global_posts'), where('authorUid', '==', profile.uid), orderBy('createdAt', 'desc'));
@@ -2029,11 +2031,23 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
       setMyGlobalPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost)));
     });
 
+    const lq = query(collection(db, 'global_posts'), where('likedBy', 'array-contains', profile.uid), orderBy('createdAt', 'desc'));
+    const unsubLiked = onSnapshot(lq, (snap) => {
+      setLikedPosts(snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost)));
+    });
+
+    const aq = query(collection(db, 'global_posts'), where('postType', '==', 'poll'), orderBy('createdAt', 'desc'), limit(100));
+    const unsubAllPolls = onSnapshot(aq, (snap) => {
+      setAllPostsForVotes(snap.docs.map(d => ({ id: d.id, ...d.data() } as GlobalPost)));
+    });
+
     return () => {
       unsubFollowing();
       unsubFollowers();
-      unsubPosts();
+      unsubWall();
       unsubGlobalPosts();
+      unsubLiked();
+      unsubAllPolls();
     };
   }, [profile?.uid]);
 
@@ -2096,122 +2110,153 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
           Posts
         </button>
         <button
-          onClick={() => setActiveSubTab('wall')}
-          className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all", activeSubTab === 'wall' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}
+          onClick={() => setActiveSubTab('interactions')}
+          className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all", activeSubTab === 'interactions' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}
         >
-          My Wall
-        </button>
-        <button
-          onClick={() => setActiveSubTab('following')}
-          className={cn("flex-1 py-3 rounded-xl text-xs font-bold transition-all", activeSubTab === 'following' ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40")}
-        >
-          Following
+          Interactions
         </button>
       </div>
 
       {activeSubTab === 'posts' && (
-        <div className="space-y-4">
-          {myGlobalPosts.length === 0 ? (
-            <div className="py-20 text-center text-brand-navy/20">
-              <MessageSquare size={64} className="mx-auto mb-4 opacity-5" />
-              <p className="font-bold">No posts yet</p>
-              <p className="text-xs">Use the + button to share something!</p>
-            </div>
-          ) : (
-            myGlobalPosts.map(post => (
-              <FeedPostCard
-                key={post.id}
-                post={post}
-                currentUser={user}
-                onViewUser={onViewUser}
-                onLike={async (p) => {
-                  const ref = doc(db, 'global_posts', p.id);
-                  const liked = (p.likedBy || []).includes(user.uid);
-                  await updateDoc(ref, {
-                    likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid),
-                    likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1
-                  });
-                }}
-                onVote={async (p, idx) => {
-                  const ref = doc(db, 'global_posts', p.id);
-                  const votes = p.pollVotes || {};
-                  const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid));
-                  const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) };
-                  if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid);
-                  await updateDoc(ref, updates);
-                }}
-              />
-            ))
-          )}
-        </div>
-      )}
-
-      {activeSubTab === 'wall' && (
         <div className="space-y-6">
-          <div className="glass-card p-6 rounded-[2.5rem] space-y-4">
-            <h3 className="font-bold text-sm px-2">Post an Update</h3>
-            <textarea 
+          {/* Global feed posts */}
+          {myGlobalPosts.length > 0 && (
+            <div className="space-y-4">
+              {myGlobalPosts.map(post => (
+                <FeedPostCard
+                  key={post.id}
+                  post={post}
+                  currentUser={user}
+                  onViewUser={onViewUser}
+                  onLike={async (p) => {
+                    const ref = doc(db, 'global_posts', p.id);
+                    const liked = (p.likedBy || []).includes(user.uid);
+                    await updateDoc(ref, {
+                      likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid),
+                      likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1
+                    });
+                  }}
+                  onVote={async (p, idx) => {
+                    const ref = doc(db, 'global_posts', p.id);
+                    const votes = p.pollVotes || {};
+                    const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid));
+                    const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) };
+                    if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid);
+                    await updateDoc(ref, updates);
+                  }}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Wall posts */}
+          <div className="glass-card p-5 rounded-[2rem] space-y-4">
+            <h3 className="font-bold text-sm px-1">Post to Wall</h3>
+            <textarea
               value={newPost}
               onChange={(e) => setNewPost(e.target.value)}
-              placeholder="What's happening?"
-              className="w-full p-4 rounded-2xl bg-brand-bg border-none focus:ring-2 focus:ring-brand-gold/20 text-sm h-24 resize-none"
+              placeholder="What's on your mind?"
+              className="w-full p-4 rounded-2xl bg-brand-bg border-none focus:ring-2 focus:ring-brand-gold/20 text-sm h-20 resize-none"
             />
-            <button 
+            <button
               onClick={handlePostOnWall}
               disabled={isPosting || !newPost.trim()}
-              className="w-full bg-brand-navy text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full bg-brand-navy text-white py-3 rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 text-sm"
             >
-              <Plus size={18} />
-              Post to Wall
+              <Plus size={16} /> Post
             </button>
           </div>
 
-          <div className="space-y-4">
-            {posts.map(post => (
+          <div className="space-y-3">
+            {wallPosts.map(post => (
               <WallPostItem key={post.id} post={post} currentUser={user} />
             ))}
-            {posts.length === 0 && (
-              <div className="py-20 text-center text-brand-navy/20">
-                <MessageSquare size={64} className="mx-auto mb-4 opacity-5" />
-                <p className="font-bold">Your wall is empty</p>
-                <p className="text-xs">Post your first update above!</p>
-              </div>
-            )}
           </div>
-        </div>
-      )}
 
-      {activeSubTab === 'following' && (
-        <div className="space-y-4">
-          <h3 className="font-display text-xl font-bold px-2">People You Follow</h3>
-          {following.slice(0, 5).map(u => (
-            <div key={u.uid} className="glass-card p-4 rounded-2xl flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5">
-                  <img src={u.photoURL} alt="" className="w-full h-full object-cover" />
-                </div>
-                <div>
-                  <p className="font-bold text-sm">{u.name}</p>
-                  <p className="text-[10px] text-brand-navy/40 font-bold uppercase tracking-widest">@{u.email?.split('@')[0]}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => onViewUser(u)}
-                className="p-2 text-brand-gold hover:bg-brand-bg rounded-xl transition-colors"
-              >
-                <ChevronRight size={20} />
-              </button>
-            </div>
-          ))}
-          {following.length === 0 && (
-            <div className="py-12 text-center text-brand-navy/20">
-              <Users size={48} className="mx-auto mb-4 opacity-10" />
-              <p className="text-sm font-bold">Not following anyone yet</p>
-              <p className="text-xs">Find people in the Community tab!</p>
+          {myGlobalPosts.length === 0 && wallPosts.length === 0 && (
+            <div className="py-20 text-center text-brand-navy/20">
+              <MessageSquare size={64} className="mx-auto mb-4 opacity-5" />
+              <p className="font-bold">Nothing posted yet</p>
+              <p className="text-xs">Use the + button or post to your wall above</p>
             </div>
           )}
         </div>
       )}
+
+      {activeSubTab === 'interactions' && (() => {
+        const votedPolls = allPostsForVotes.filter(p =>
+          Object.values(p.pollVotes || {}).some(arr => (arr as string[]).includes(profile.uid))
+        );
+        return (
+          <div className="space-y-6">
+            {/* Liked posts */}
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold px-1 flex items-center gap-2">
+                <Heart size={12} fill="currentColor" /> Liked ({likedPosts.length})
+              </p>
+              {likedPosts.length === 0 ? (
+                <div className="glass-card rounded-2xl p-6 text-center text-brand-navy/30 text-sm">Nothing liked yet</div>
+              ) : likedPosts.map(post => (
+                <FeedPostCard
+                  key={post.id}
+                  post={post}
+                  currentUser={user}
+                  onViewUser={onViewUser}
+                  onLike={async (p) => {
+                    const ref = doc(db, 'global_posts', p.id);
+                    const liked = (p.likedBy || []).includes(user.uid);
+                    await updateDoc(ref, {
+                      likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid),
+                      likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1
+                    });
+                  }}
+                  onVote={async (p, idx) => {
+                    const ref = doc(db, 'global_posts', p.id);
+                    const votes = p.pollVotes || {};
+                    const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid));
+                    const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) };
+                    if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid);
+                    await updateDoc(ref, updates);
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Voted polls */}
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold px-1 flex items-center gap-2">
+                <BarChart2 size={12} /> Votes Cast ({votedPolls.length})
+              </p>
+              {votedPolls.length === 0 ? (
+                <div className="glass-card rounded-2xl p-6 text-center text-brand-navy/30 text-sm">No polls voted in yet</div>
+              ) : votedPolls.map(post => (
+                <FeedPostCard
+                  key={post.id}
+                  post={post}
+                  currentUser={user}
+                  onViewUser={onViewUser}
+                  onLike={async (p) => {
+                    const ref = doc(db, 'global_posts', p.id);
+                    const liked = (p.likedBy || []).includes(user.uid);
+                    await updateDoc(ref, {
+                      likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid),
+                      likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1
+                    });
+                  }}
+                  onVote={async (p, idx) => {
+                    const ref = doc(db, 'global_posts', p.id);
+                    const votes = p.pollVotes || {};
+                    const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid));
+                    const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) };
+                    if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid);
+                    await updateDoc(ref, updates);
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       <AnimatePresence>
         {showFollowModal && (
