@@ -3955,10 +3955,15 @@ function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onViewSto
   const [authorProfile, setAuthorProfile] = useState<{ name: string; photoURL: string } | null>(null);
 
   useEffect(() => {
+    if (post.authorRole === 'vendor' && post.storeId) {
+      return onSnapshot(doc(db, 'stores', post.storeId), (snap) => {
+        if (snap.exists()) setAuthorProfile({ name: snap.data().name, photoURL: snap.data().logoUrl || '' });
+      }, () => {});
+    }
     return onSnapshot(doc(db, 'users', post.authorUid), (snap) => {
       if (snap.exists()) setAuthorProfile({ name: snap.data().name, photoURL: snap.data().photoURL });
     }, () => {});
-  }, [post.authorUid]);
+  }, [post.authorUid, post.storeId, post.authorRole]);
 
   const isLiked = currentUser ? (post.likedBy || []).includes(currentUser.uid) : false;
   const isOwn = currentUser?.uid === post.authorUid;
@@ -4053,7 +4058,7 @@ function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onViewSto
       <div className="px-5 pt-5 pb-3 space-y-3">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full overflow-hidden border border-black/5 cursor-pointer shrink-0" onClick={handleAvatarClick}>
-            <img src={authorProfile?.photoURL || post.authorPhoto || `https://i.pravatar.cc/40?u=${post.authorUid}`} alt="" className="w-full h-full object-cover" />
+            <img src={authorProfile?.photoURL || (post.authorRole !== 'vendor' ? post.authorPhoto : '') || `https://i.pravatar.cc/40?u=${post.authorUid}`} alt="" className="w-full h-full object-cover" />
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 flex-wrap">
