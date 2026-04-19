@@ -2544,40 +2544,135 @@ function Modal({ title, children, onClose }: { title: string, children: React.Re
 }
 
 function CardBuilder({ store }: { store: StoreProfile | null }) {
+  const [stampsRequired, setStampsRequired] = useState(store?.stamps_required_for_reward || 10);
+  const [reward, setReward] = useState(store?.reward || '');
+  const [theme, setTheme] = useState(store?.theme || '#1e3a5f');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    if (store) {
+      setStampsRequired(store.stamps_required_for_reward || 10);
+      setReward(store.reward || '');
+      setTheme(store.theme || '#1e3a5f');
+    }
+  }, [store?.id]);
+
+  const handleSave = async () => {
+    if (!store) return;
+    setSaving(true);
+    try {
+      await updateDoc(doc(db, 'stores', store.id), {
+        stamps_required_for_reward: stampsRequired,
+        reward: reward.trim(),
+        theme,
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const THEMES = ['#1e3a5f', '#b8860b', '#10B981', '#7C3AED', '#EF4444', '#0891b2'];
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 pb-20">
       <header>
         <h2 className="font-display text-3xl font-bold mb-1">Card Builder</h2>
-        <p className="text-brand-navy/60">Design your loyalty experience.</p>
+        <p className="text-brand-navy/60">Configure your loyalty stamp card.</p>
       </header>
 
-      <div className="glass-card p-8 rounded-[2.5rem] space-y-6">
+      <div className="glass-card p-6 rounded-[2.5rem] space-y-5">
+
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Card Name</label>
-          <input defaultValue={store?.name} className="w-full p-4 rounded-2xl bg-brand-bg border-none focus:ring-2 focus:ring-brand-gold/20 font-bold" />
+          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Stamps Required for Reward</label>
+          <input
+            type="number"
+            min="1"
+            max="50"
+            value={stampsRequired}
+            onChange={e => setStampsRequired(Math.max(1, parseInt(e.target.value) || 1))}
+            className="w-full px-5 py-4 rounded-2xl bg-brand-bg border border-brand-navy/10 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
+          />
         </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Stamp Limit</label>
-            <select defaultValue={store?.stamps_required_for_reward || 10} className="w-full p-4 rounded-2xl bg-brand-bg border-none focus:ring-2 focus:ring-brand-gold/20 font-bold">
-              {[4, 6, 8, 10, 12, 15, 20].map(n => <option key={n} value={n}>{n} Stamps</option>)}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Theme Color</label>
-            <div className="flex gap-2 p-2 bg-brand-bg rounded-2xl">
-              {['#1B2B4B', '#F5A623', '#10B981', '#EF4444'].map(c => (
-                <button key={c} className="w-8 h-8 rounded-lg" style={{ backgroundColor: c }} />
-              ))}
+
+        <div className="space-y-2">
+          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Reward (e.g. Free Coffee)</label>
+          <input
+            value={reward}
+            onChange={e => setReward(e.target.value)}
+            placeholder="e.g. Free coffee, Free class..."
+            className="w-full px-5 py-4 rounded-2xl bg-brand-bg border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Card Colour</label>
+          <div className="flex gap-3 flex-wrap">
+            {THEMES.map(c => (
+              <button
+                key={c}
+                onClick={() => setTheme(c)}
+                className={cn("w-10 h-10 rounded-2xl transition-all border-2", theme === c ? "border-brand-gold scale-110 shadow-lg" : "border-transparent")}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+            <div className="relative w-10 h-10">
+              <input
+                type="color"
+                value={theme}
+                onChange={e => setTheme(e.target.value)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              <div className="w-10 h-10 rounded-2xl border-2 border-dashed border-brand-navy/20 flex items-center justify-center">
+                <Palette size={14} className="text-brand-navy/40" />
+              </div>
             </div>
           </div>
         </div>
-        <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Reward Description</label>
-          <input defaultValue="Free Item" className="w-full p-4 rounded-2xl bg-brand-bg border-none focus:ring-2 focus:ring-brand-gold/20 font-bold" />
+
+        {/* Live preview */}
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40 mb-3">Live Preview</p>
+          <div className="rounded-[1.75rem] p-5 space-y-4" style={{ background: `linear-gradient(135deg, ${theme}, ${theme}bb)` }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {store?.logoUrl
+                  ? <img src={store.logoUrl} alt="" className="w-11 h-11 rounded-2xl object-cover border-2 border-white/30" />
+                  : <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center"><Store size={18} className="text-white/60" /></div>}
+                <div>
+                  <p className="text-white font-bold">{store?.name || 'Your Business'}</p>
+                  <p className="text-white/50 text-xs">{stampsRequired} stamps to redeem</p>
+                </div>
+              </div>
+              {reward && (
+                <div className="bg-white/20 rounded-xl px-3 py-1">
+                  <p className="text-white text-xs font-bold">{reward}</p>
+                </div>
+              )}
+            </div>
+            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(stampsRequired, 10)}, 1fr)` }}>
+              {Array.from({ length: stampsRequired }).map((_, i) => (
+                <div key={i} className="aspect-square rounded-xl border border-dashed border-white/25 flex items-center justify-center">
+                  <span className="text-white/30 text-[9px] font-bold">{i + 1}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-white/40 text-xs text-center">{stampsRequired} / {stampsRequired} Stamps</p>
+          </div>
         </div>
-        <button className="w-full bg-brand-navy text-white py-4 rounded-2xl font-bold mt-4">
-          Save Template
+
+        <p className="text-xs text-brand-navy/40">Users currently collecting stamps finish their card at the old count. The new settings apply from the next cycle onwards.</p>
+
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full bg-brand-navy text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
+        >
+          {saved ? <><CheckCircle2 size={16} /> Saved!</> : saving ? 'Saving...' : <><Save size={16} /> Save — Set as New Card</>}
         </button>
       </div>
     </div>
