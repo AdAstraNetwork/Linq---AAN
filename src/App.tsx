@@ -176,6 +176,8 @@ interface StoreProfile {
   reward?: string;
   theme?: string;
   location?: string;
+  lat?: number;
+  lng?: number;
   visibilitySettings?: {
     members?: boolean;
     stamps?: boolean;
@@ -4665,11 +4667,60 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile, us
     }, () => {});
   }, [currentUser?.uid]);
 
+  const geocodeCache = useRef<Map<string, { lat: number; lng: number } | null>>(new Map());
+
+  const geocodeAddress = async (address: string): Promise<{ lat: number; lng: number } | null> => {
+    if (geocodeCache.current.has(address)) return geocodeCache.current.get(address)!;
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(address)}&format=json&limit=1`, { headers: { 'Accept-Language': 'en' } });
+      const data = await res.json();
+      const result = data[0] ? { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) } : null;
+      geocodeCache.current.set(address, result);
+      return result;
+    } catch {
+      geocodeCache.current.set(address, null);
+      return null;
+    }
+  };
+
+  const haversineKm = (lat1: number, lng1: number, lat2: number, lng2: number) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const [allStores, setAllStores] = useState<StoreProfile[]>([]);
+
   useEffect(() => {
     return onSnapshot(collection(db, 'stores'), (snap) => {
-      setHotStores(snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreProfile)));
+      setAllStores(snap.docs.map(d => ({ id: d.id, ...d.data() } as StoreProfile)));
     }, () => {});
   }, []);
+
+  useEffect(() => {
+    const userLoc = currentProfile?.location as { lat: number; lng: number } | undefined;
+    if (!userLoc?.lat) { setHotStores(allStores); return; }
+    let cancelled = false;
+    (async () => {
+      const results: StoreProfile[] = [];
+      for (const store of allStores) {
+        if (store.lat && store.lng) {
+          if (haversineKm(userLoc.lat, userLoc.lng, store.lat, store.lng) <= 15) results.push(store);
+          continue;
+        }
+        const addr = store.address || store.location;
+        if (!addr) { results.push(store); continue; }
+        const coords = await geocodeAddress(addr);
+        if (!coords) { results.push(store); continue; }
+        if (haversineKm(userLoc.lat, userLoc.lng, coords.lat, coords.lng) <= 15) results.push(store);
+        await new Promise(r => setTimeout(r, 1100)); // Nominatim rate limit: 1 req/s
+      }
+      if (!cancelled) setHotStores(results);
+    })();
+    return () => { cancelled = true; };
+  }, [allStores, currentProfile?.location]);
 
   const handleJoinStore = async (store: StoreProfile) => {
     if (!currentUser) return;
