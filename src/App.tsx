@@ -4,10 +4,11 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  onAuthStateChanged, 
-  signInWithPopup, 
-  GoogleAuthProvider, 
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  reauthenticateWithPopup,
+  GoogleAuthProvider,
   signOut,
   User as FirebaseUser
 } from 'firebase/auth';
@@ -625,8 +626,19 @@ export default function App() {
     // Delete user profile doc
     await deleteDoc(doc(db, 'users', uid));
 
-    // Delete Firebase Auth account (signs out automatically)
-    await user.delete();
+    // Delete Firebase Auth account — re-authenticate first if the session is stale
+    try {
+      await user.delete();
+    } catch (err: any) {
+      if (err?.code === 'auth/requires-recent-login') {
+        await reauthenticateWithPopup(user, new GoogleAuthProvider());
+        await user.delete();
+      } else {
+        throw err;
+      }
+    }
+    // Ensure local state is cleared and landing page is shown
+    await signOut(auth);
   };
 
   const handleRoleSelect = async (role: 'consumer' | 'vendor') => {
