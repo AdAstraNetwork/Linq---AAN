@@ -2750,54 +2750,45 @@ function ProfileScreen({ profile, userCards, onLogout, onDeleteAccount, onViewUs
           </button>
         </div>
 
-        {activeSubTab === 'posts' && (
-          <div className="space-y-4">
-            {/* Customer wall posts on this business */}
-            {storeWallPosts.length > 0 && (
-              <div className="space-y-3">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-brand-gold px-1 flex items-center gap-2">
-                  <MessageSquare size={12} /> Wall Posts ({storeWallPosts.length})
-                </p>
-                {storeWallPosts.map(post => (
-                  <div key={post.id} className="glass-card p-5 rounded-[2rem] space-y-3">
+        {activeSubTab === 'posts' && (() => {
+          const merged = [
+            ...myGlobalPosts.map(p => ({ _type: 'global' as const, _ts: p.createdAt?.toMillis?.() ?? 0, data: p })),
+            ...storeWallPosts.map(p => ({ _type: 'wall' as const, _ts: p.createdAt?.toMillis?.() ?? 0, data: p })),
+          ].sort((a, b) => b._ts - a._ts);
+          return (
+            <div className="space-y-4">
+              {merged.map(item =>
+                item._type === 'global' ? (
+                  <FeedPostCard key={item.data.id} post={item.data} currentUser={user} onViewUser={onViewUser}
+                    onLike={async (p) => { const ref = doc(db, 'global_posts', p.id); const liked = (p.likedBy || []).includes(user.uid); await updateDoc(ref, { likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid), likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1 }); }}
+                    onVote={async (p, idx) => { const ref = doc(db, 'global_posts', p.id); const votes = p.pollVotes || {}; const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid)); const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) }; if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid); await updateDoc(ref, updates); }}
+                  />
+                ) : (
+                  <div key={item.data.id} className="glass-card p-5 rounded-[2rem] space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="w-9 h-9 rounded-full overflow-hidden border border-brand-navy/5 shrink-0">
-                        <img src={post.authorPhoto || `https://i.pravatar.cc/40?u=${post.authorUid}`} alt="" className="w-full h-full object-cover" />
+                        <img src={item.data.authorPhoto || `https://i.pravatar.cc/40?u=${item.data.authorUid}`} alt="" className="w-full h-full object-cover" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm leading-snug">
-                          <span
-                            className="font-bold cursor-pointer hover:text-brand-gold transition-colors"
-                            onClick={async () => {
-                              const snap = await getDoc(doc(db, 'users', post.authorUid)).catch(() => null);
-                              if (snap?.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile);
-                            }}
-                          >
-                            {post.authorName}
+                          <span className="font-bold cursor-pointer hover:text-brand-gold transition-colors"
+                            onClick={async () => { const snap = await getDoc(doc(db, 'users', item.data.authorUid)).catch(() => null); if (snap?.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile); }}>
+                            {item.data.authorName}
                           </span>
                           <span className="text-brand-navy/30 mx-1">›</span>
                           <span className="font-bold text-brand-gold">{vendorStore?.name || profile.name}</span>
                         </p>
-                        <p className="text-[10px] text-brand-navy/40 font-medium">
-                          {post.createdAt ? format(post.createdAt.toDate(), 'MMM d · h:mm a') : 'Just now'}
-                        </p>
+                        <p className="text-[10px] text-brand-navy/40 font-medium">{item.data.createdAt ? format(item.data.createdAt.toDate(), 'MMM d · h:mm a') : 'Just now'}</p>
                       </div>
                     </div>
-                    <p className="text-sm text-brand-navy/80 leading-relaxed">{post.content}</p>
+                    <p className="text-sm text-brand-navy/80 leading-relaxed">{item.data.content}</p>
                   </div>
-                ))}
-              </div>
-            )}
-            {/* Vendor's own global feed posts */}
-            {myGlobalPosts.map(post => (
-              <FeedPostCard key={post.id} post={post} currentUser={user} onViewUser={onViewUser}
-                onLike={async (p) => { const ref = doc(db, 'global_posts', p.id); const liked = (p.likedBy || []).includes(user.uid); await updateDoc(ref, { likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid), likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1 }); }}
-                onVote={async (p, idx) => { const ref = doc(db, 'global_posts', p.id); const votes = p.pollVotes || {}; const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid)); const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) }; if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid); await updateDoc(ref, updates); }}
-              />
-            ))}
-            {myGlobalPosts.length === 0 && storeWallPosts.length === 0 && <div className="py-16 text-center text-brand-navy/20"><MessageSquare size={48} className="mx-auto mb-3 opacity-10" /><p className="font-bold text-sm">No posts yet</p></div>}
-          </div>
-        )}
+                )
+              )}
+              {merged.length === 0 && <div className="py-16 text-center text-brand-navy/20"><MessageSquare size={48} className="mx-auto mb-3 opacity-10" /><p className="font-bold text-sm">No posts yet</p></div>}
+            </div>
+          );
+        })()}
 
         {activeSubTab === 'interactions' && (() => {
           const votedPolls = allPostsForVotes.filter(p => Object.values(p.pollVotes || {}).some(arr => (arr as string[]).includes(profile.uid)));
