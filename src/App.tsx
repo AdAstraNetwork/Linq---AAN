@@ -149,6 +149,10 @@ interface UserProfile {
   photoURL: string;
   role: UserRole;
   roleConfirmed?: boolean;
+  onboardingComplete?: boolean;
+  gender?: string;
+  birthday?: string;
+  location?: { lat: number; lng: number; city?: string };
   total_cards_held: number;
   totalStamps: number;
   totalRedeemed: number;
@@ -273,6 +277,7 @@ export default function App() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [needsRoleSelection, setNeedsRoleSelection] = useState(false);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('for-you');
   const [viewingStore, setViewingStore] = useState<StoreProfile | null>(null);
   const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
@@ -557,9 +562,15 @@ export default function App() {
       setUser(firebaseUser);
       if (firebaseUser) {
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        setNeedsRoleSelection(!userDoc.exists());
+        if (!userDoc.exists()) {
+          setNeedsRoleSelection(true);
+        } else {
+          const data = userDoc.data();
+          setNeedsOnboarding(data.roleConfirmed === true && !data.onboardingComplete);
+        }
       } else {
         setNeedsRoleSelection(false);
+        setNeedsOnboarding(false);
       }
       setLoading(false);
     });
@@ -638,6 +649,18 @@ export default function App() {
       });
     }
     setNeedsRoleSelection(false);
+    setNeedsOnboarding(true);
+  };
+
+  const handleOnboardingComplete = async (data: { gender: string; birthday: string; location: { lat: number; lng: number; city?: string } | null }) => {
+    if (!user) return;
+    await updateDoc(doc(db, 'users', user.uid), {
+      ...(data.gender ? { gender: data.gender } : {}),
+      ...(data.birthday ? { birthday: data.birthday } : {}),
+      ...(data.location ? { location: data.location } : {}),
+      onboardingComplete: true
+    });
+    setNeedsOnboarding(false);
   };
 
   if (loading) {
@@ -659,6 +682,10 @@ export default function App() {
 
   if (needsRoleSelection) {
     return <RoleSelectionScreen user={user} onSelect={handleRoleSelect} />;
+  }
+
+  if (needsOnboarding) {
+    return <OnboardingScreen user={user} onComplete={handleOnboardingComplete} />;
   }
 
   return (
@@ -912,6 +939,185 @@ function RoleSelectionScreen({ user, onSelect }: { user: FirebaseUser, onSelect:
       </div>
 
       <p className="text-xs text-brand-navy/30 mt-8">You can update this later in your profile settings</p>
+    </div>
+  );
+}
+
+function OnboardingScreen({ user, onComplete }: { user: FirebaseUser, onComplete: (data: { gender: string; birthday: string; location: { lat: number; lng: number; city?: string } | null }) => Promise<void> }) {
+  const STEPS = ['gender', 'birthday', 'location'] as const;
+  const [step, setStep] = React.useState(0);
+  const [gender, setGender] = React.useState('');
+  const [birthday, setBirthday] = React.useState('');
+  const [locationData, setLocationData] = React.useState<{ lat: number; lng: number; city?: string } | null>(null);
+  const [locationStatus, setLocationStatus] = React.useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
+  const [saving, setSaving] = React.useState(false);
+
+  const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+
+  const canAdvance = step === 0 ? !!gender : step === 1 ? !!birthday : locationStatus === 'granted' || locationStatus === 'denied';
+
+  const requestLocation = () => {
+    setLocationStatus('requesting');
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude: lat, longitude: lng } = pos.coords;
+        let city: string | undefined;
+        try {
+          const res = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`);
+          const json = await res.json();
+          city = json.address?.city || json.address?.town || json.address?.village;
+        } catch {}
+        setLocationData({ lat, lng, city });
+        setLocationStatus('granted');
+      },
+      () => setLocationStatus('denied'),
+      { timeout: 10000 }
+    );
+  };
+
+  const handleFinish = async () => {
+    setSaving(true);
+    await onComplete({ gender, birthday, location: locationData });
+  };
+
+  const stepContent = [
+    // Step 0 — Gender
+    <>
+      <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
+        <UserCheck className="w-7 h-7 text-brand-gold" />
+      </div>
+      <h2 className="font-display font-bold text-2xl text-brand-navy mb-1">What's your gender?</h2>
+      <p className="text-sm text-brand-navy/40 mb-8">Help us personalise your experience</p>
+      <div className="w-full space-y-3">
+        {GENDERS.map(g => (
+          <button
+            key={g}
+            onClick={() => setGender(g)}
+            className={`w-full py-4 px-5 rounded-2xl font-bold text-sm flex items-center justify-between transition-all active:scale-[0.98] ${
+              gender === g
+                ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20'
+                : 'bg-white border-2 border-brand-navy/10 text-brand-navy hover:border-brand-gold/40'
+            }`}
+          >
+            {g}
+            {gender === g && <Sparkles size={16} className="text-brand-gold" />}
+          </button>
+        ))}
+      </div>
+    </>,
+
+    // Step 1 — Birthday
+    <>
+      <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
+        <Calendar className="w-7 h-7 text-brand-gold" />
+      </div>
+      <h2 className="font-display font-bold text-2xl text-brand-navy mb-1">When's your birthday?</h2>
+      <p className="text-sm text-brand-navy/40 mb-8">Get exclusive birthday rewards from businesses</p>
+      <div className="w-full">
+        <input
+          type="date"
+          value={birthday}
+          onChange={e => setBirthday(e.target.value)}
+          max={new Date().toISOString().split('T')[0]}
+          className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-brand-navy/10 text-brand-navy font-bold text-base focus:outline-none focus:border-brand-gold/60 text-center"
+        />
+      </div>
+    </>,
+
+    // Step 2 — Location
+    <>
+      <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
+        <MapPin className="w-7 h-7 text-brand-gold" />
+      </div>
+      <h2 className="font-display font-bold text-2xl text-brand-navy mb-1">Find nearby deals</h2>
+      <p className="text-sm text-brand-navy/40 mb-8">Allow location access to discover businesses around you</p>
+      <div className="w-full">
+        {locationStatus === 'idle' && (
+          <button
+            onClick={requestLocation}
+            className="w-full py-4 px-5 rounded-2xl bg-brand-navy text-white font-bold flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-lg shadow-brand-navy/20"
+          >
+            <MapPin size={18} />
+            Allow Location Access
+          </button>
+        )}
+        {locationStatus === 'requesting' && (
+          <div className="flex items-center justify-center gap-3 py-4 text-brand-navy/50">
+            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+              <Sparkles size={18} className="text-brand-gold" />
+            </motion.div>
+            <span className="font-medium text-sm">Requesting access…</span>
+          </div>
+        )}
+        {locationStatus === 'granted' && (
+          <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-5 flex items-center gap-4">
+            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center shrink-0">
+              <MapPin size={18} className="text-green-600" />
+            </div>
+            <div className="text-left">
+              <p className="font-bold text-green-700 text-sm">Location allowed</p>
+              {locationData?.city && <p className="text-xs text-green-600/70 mt-0.5">{locationData.city}</p>}
+            </div>
+          </div>
+        )}
+        {locationStatus === 'denied' && (
+          <div className="space-y-3">
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 text-center">
+              <p className="font-bold text-amber-700 text-sm">Location access denied</p>
+              <p className="text-xs text-amber-600/70 mt-1">You can enable it later in your device settings</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  ];
+
+  return (
+    <div className="min-h-screen flex flex-col bg-brand-bg px-8">
+      {/* Progress dots */}
+      <div className="flex items-center justify-center gap-2 pt-14 mb-10">
+        {STEPS.map((_, i) => (
+          <div
+            key={i}
+            className={`rounded-full transition-all ${i === step ? 'w-8 h-2 bg-brand-navy' : i < step ? 'w-2 h-2 bg-brand-navy/40' : 'w-2 h-2 bg-brand-navy/15'}`}
+          />
+        ))}
+      </div>
+
+      <div className="flex-1 flex flex-col items-center text-center max-w-xs mx-auto w-full">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={step}
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -30 }}
+            transition={{ duration: 0.2 }}
+            className="w-full"
+          >
+            {stepContent[step]}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      <div className="pb-12 max-w-xs mx-auto w-full space-y-3">
+        <button
+          onClick={() => {
+            if (step < STEPS.length - 1) setStep(s => s + 1);
+            else handleFinish();
+          }}
+          disabled={!canAdvance || saving}
+          className="w-full py-4 rounded-2xl bg-brand-navy text-white font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-40 flex items-center justify-center gap-2"
+        >
+          {saving
+            ? <><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={16} /></motion.div> Setting up…</>
+            : step < STEPS.length - 1 ? 'Continue' : 'Get Started'}
+        </button>
+        {step < STEPS.length - 1 && (
+          <button onClick={() => setStep(s => s + 1)} className="w-full py-3 text-xs text-brand-navy/30 hover:text-brand-navy/50 transition-colors">
+            Skip for now
+          </button>
+        )}
+      </div>
     </div>
   );
 }
