@@ -5479,6 +5479,8 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
   const [posts, setPosts] = useState<Post[]>([]);
   const [vendorGlobalPosts, setVendorGlobalPosts] = useState<GlobalPost[]>([]);
   const [storeReviews, setStoreReviews] = useState<any[]>([]);
+  const [visibleReviewCount, setVisibleReviewCount] = useState(10);
+  const reviewSentinelRef = useRef<HTMLDivElement>(null);
   const [activeStoreTab, setActiveStoreTab] = useState<'posts' | 'reviews'>('posts');
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewText, setReviewText] = useState('');
@@ -5659,6 +5661,18 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
   };
 
   const myReview = storeReviews.find(r => r.authorUid === user.uid);
+  const avgRating = storeReviews.length ? storeReviews.reduce((s, r) => s + (r.rating || 5), 0) / storeReviews.length : null;
+  const visibleReviews = storeReviews.slice(0, visibleReviewCount);
+
+  useEffect(() => {
+    const el = reviewSentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry.isIntersecting) setVisibleReviewCount(c => c + 10);
+    }, { rootMargin: '200px' });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [storeReviews.length]);
 
   const handleSubmitReview = async () => {
     if (!reviewText.trim() || myReview) return;
@@ -6001,8 +6015,26 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
               </div>
             )
           )}
+          {/* Average rating summary */}
+          {avgRating !== null && (
+            <div className="glass-card p-5 rounded-[2rem] flex items-center gap-4">
+              <div className="text-center">
+                <p className="text-4xl font-extrabold text-brand-navy">{avgRating.toFixed(1)}</p>
+                <div className="flex items-center gap-0.5 mt-1 justify-center">
+                  {[1,2,3,4,5].map(s => (
+                    <Star key={s} size={13} className={s <= Math.round(avgRating) ? "text-brand-gold fill-brand-gold" : "text-brand-navy/20"} />
+                  ))}
+                </div>
+              </div>
+              <div className="text-sm text-brand-navy/50">
+                <p className="font-bold text-brand-navy">{storeReviews.length} {storeReviews.length === 1 ? 'review' : 'reviews'}</p>
+                <p>Based on customer ratings</p>
+              </div>
+            </div>
+          )}
+
           {/* Review list */}
-          {storeReviews.map(review => (
+          {visibleReviews.map(review => (
             <div key={review.id} className="glass-card p-5 rounded-[2rem] space-y-2">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-full overflow-hidden border border-brand-navy/5 shrink-0">
@@ -6021,6 +6053,7 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
               <p className="text-sm text-brand-navy/70 leading-relaxed">{review.content}</p>
             </div>
           ))}
+          {visibleReviewCount < storeReviews.length && <div ref={reviewSentinelRef} className="py-4 text-center text-xs text-brand-navy/30">Loading more...</div>}
           {storeReviews.length === 0 && <div className="py-12 text-center text-brand-navy/20"><Star size={40} className="mx-auto mb-2 opacity-10" /><p className="font-bold text-sm">No reviews yet</p></div>}
         </div>
       )}
