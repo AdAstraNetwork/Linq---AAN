@@ -2860,7 +2860,6 @@ function ToggleSwitch({ on, onChange }: { on: boolean; onChange: (v: boolean) =>
 function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile, user: FirebaseUser, onClose: () => void }) {
   const [name, setName] = useState(profile.name || '');
   const [handle, setHandle] = useState(profile.handle || user.email?.split('@')[0] || '');
-  const [isVendor, setIsVendor] = useState(profile.role === 'vendor');
   const [store, setStore] = useState<StoreProfile | null>(null);
   const [storeName, setStoreName] = useState('');
   const [storeCategory, setStoreCategory] = useState<Category>('Food');
@@ -2893,10 +2892,9 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
     setSaving(true);
     try {
       const profileUpdates: any = { name, handle };
-      if (isVendor !== (profile.role === 'vendor')) profileUpdates.role = isVendor ? 'vendor' : 'consumer';
       await updateDoc(doc(db, 'users', profile.uid), profileUpdates);
 
-      if (isVendor && store) {
+      if (profile.role === 'vendor' && store) {
         await updateDoc(doc(db, 'stores', store.id), {
           name: storeName, category: storeCategory, theme: storeTheme,
           logoUrl: storeLogo, location: storeLocation, visibilitySettings: visibility,
@@ -2904,11 +2902,7 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
       }
 
       setSaved(true);
-      setTimeout(() => {
-        setSaved(false);
-        if (isVendor !== (profile.role === 'vendor')) window.location.reload();
-        else onClose();
-      }, 1000);
+      setTimeout(() => { setSaved(false); onClose(); }, 1000);
     } catch (err) {
       console.error('Save profile error:', err);
     } finally {
@@ -2971,24 +2965,8 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
           </div>
         </div>
 
-        {/* Business Toggle — only visible for vendor accounts */}
-        {profile.role === 'vendor' && (
-        <div className="glass-card p-5 rounded-[2rem] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-brand-navy/5 flex items-center justify-center">
-              <Building2 size={20} className="text-brand-navy" />
-            </div>
-            <div>
-              <p className="font-bold text-sm">Business Account</p>
-              <p className="text-xs text-brand-navy/40">Enable to manage a loyalty programme</p>
-            </div>
-          </div>
-          <ToggleSwitch on={isVendor} onChange={setIsVendor} />
-        </div>
-        )}
-
         {/* Business Fields */}
-        {profile.role === 'vendor' && isVendor && (
+        {profile.role === 'vendor' && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
 
             <SectionLabel icon={<Building2 size={14} className="text-brand-gold" />} label="Business Details" />
