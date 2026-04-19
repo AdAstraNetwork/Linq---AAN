@@ -3080,13 +3080,6 @@ function SettingsMenu({
     };
   }, [profile?.uid]);
 
-  const toggleRole = async () => {
-    if (!profile) return;
-    const newRole = profile.role === 'consumer' ? 'vendor' : 'consumer';
-    await updateDoc(doc(db, 'users', profile.uid), { role: newRole });
-    window.location.reload(); 
-  };
-
   const seedData = async () => {
     if (!profile) return;
     setIsSeeding(true);
@@ -3461,21 +3454,6 @@ function SettingsMenu({
             </button>
           </div>
 
-          <button 
-            onClick={toggleRole}
-            className="w-full bg-brand-navy text-white p-5 rounded-3xl flex items-center justify-between group hover:bg-brand-navy/90 transition-all mt-4"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center text-white group-hover:scale-110 transition-transform">
-                <LayoutDashboard size={24} />
-              </div>
-              <div className="text-left">
-                <p className="font-bold">Switch to {profile?.role === 'consumer' ? 'Vendor' : 'Consumer'}</p>
-                <p className="text-xs text-white/60">Change your account mode</p>
-              </div>
-            </div>
-            <ChevronRight className="text-white/20" />
-          </button>
         </div>
 
         <AnimatePresence>
