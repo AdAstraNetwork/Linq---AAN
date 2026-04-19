@@ -5936,28 +5936,28 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
                   onLike={async (p) => { const ref = doc(db, 'global_posts', p.id); const liked = (p.likedBy || []).includes(user.uid); await updateDoc(ref, { likedBy: liked ? arrayRemove(user.uid) : arrayUnion(user.uid), likesCount: liked ? Math.max(0, p.likesCount - 1) : p.likesCount + 1 }); }}
                   onVote={async (p, idx) => { const ref = doc(db, 'global_posts', p.id); const votes = p.pollVotes || {}; const oldKey = Object.keys(votes).find(k => (votes[k] || []).includes(user.uid)); const updates: any = { [`pollVotes.${idx}`]: arrayUnion(user.uid) }; if (oldKey !== undefined && oldKey !== String(idx)) updates[`pollVotes.${oldKey}`] = arrayRemove(user.uid); await updateDoc(ref, updates); }}
                 />
-              ) : (
-                <div key={item.data.id} className="glass-card p-5 rounded-[2rem] space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full overflow-hidden border border-brand-navy/5 shrink-0 cursor-pointer"
-                      onClick={async () => { const snap = await getDoc(doc(db, 'users', item.data.authorUid)).catch(() => null); if (snap?.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile); }}>
-                      <img src={item.data.authorPhoto || `https://i.pravatar.cc/40?u=${item.data.authorUid}`} alt="" className="w-full h-full object-cover" />
+              ) : (() => {
+                const isOwnerPost = item.data.authorUid === store.ownerUid;
+                const displayPhoto = isOwnerPost ? (store.logoUrl || '') : (item.data.authorPhoto || `https://i.pravatar.cc/40?u=${item.data.authorUid}`);
+                const displayName = isOwnerPost ? store.name : item.data.authorName;
+                return (
+                  <div key={item.data.id} className="glass-card p-5 rounded-[2rem] space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-full overflow-hidden border border-brand-navy/5 shrink-0">
+                        <img src={displayPhoto} alt="" className="w-full h-full object-cover" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-sm">{displayName}</p>
+                        {!isOwnerPost && (
+                          <p className="text-[10px] text-brand-navy/40">on <span className="font-bold text-brand-gold">{store.name}</span></p>
+                        )}
+                        <p className="text-[10px] text-brand-navy/40 font-medium">{item.data.createdAt ? format(item.data.createdAt.toDate(), 'MMM d · h:mm a') : 'Just now'}</p>
+                      </div>
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm leading-snug">
-                        <span className="font-bold cursor-pointer hover:text-brand-gold transition-colors"
-                          onClick={async () => { const snap = await getDoc(doc(db, 'users', item.data.authorUid)).catch(() => null); if (snap?.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile); }}>
-                          {item.data.authorName}
-                        </span>
-                        <span className="text-brand-navy/30 mx-1">›</span>
-                        <span className="font-bold text-brand-gold">{store.name}</span>
-                      </p>
-                      <p className="text-[10px] text-brand-navy/40 font-medium">{item.data.createdAt ? format(item.data.createdAt.toDate(), 'MMM d · h:mm a') : 'Just now'}</p>
-                    </div>
+                    <p className="text-sm text-brand-navy/80 leading-relaxed">{item.data.content}</p>
                   </div>
-                  <p className="text-sm text-brand-navy/80 leading-relaxed">{item.data.content}</p>
-                </div>
-              )
+                );
+              })()
             )}
             {merged.length === 0 && <div className="py-12 text-center text-brand-navy/20"><MessageSquare size={40} className="mx-auto mb-2 opacity-10" /><p className="font-bold text-sm">No posts yet</p></div>}
           </div>
