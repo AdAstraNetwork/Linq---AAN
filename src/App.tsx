@@ -1601,7 +1601,8 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
               <CreditCard size={18} className="text-brand-gold" />
               <h3 className="font-bold text-lg">Card Settings</h3>
             </div>
-            <p className="text-xs text-brand-navy/40 -mt-2">Changes apply to new cycles. Users currently in progress finish on their existing stamp count.</p>
+            <p className="text-xs text-brand-navy/40 -mt-2">Users in progress finish their current card first. New cycles use the saved settings.</p>
+
             <div className="space-y-2">
               <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Stamps Required for Reward</label>
               <input
@@ -1614,7 +1615,7 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
               />
             </div>
             <div className="space-y-2">
-              <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Reward (e.g. Free Coffee)</label>
+              <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Reward</label>
               <input
                 value={cardRewardInput}
                 onChange={e => setCardRewardInput(e.target.value)}
@@ -1622,12 +1623,49 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
                 className="w-full px-5 py-4 rounded-2xl bg-brand-bg border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
               />
             </div>
+
+            {/* Live card preview */}
+            {(() => {
+              const previewStamps = Math.max(1, parseInt(cardStampsInput) || 10);
+              const bg = store?.theme || '#1e3a5f';
+              return (
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40 mb-2">Card Preview</p>
+                  <div className="rounded-[1.75rem] p-5 space-y-3" style={{ background: `linear-gradient(135deg, ${bg}, ${bg}cc)` }}>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {store?.logoUrl
+                          ? <img src={store.logoUrl} alt="" className="w-9 h-9 rounded-xl object-cover border-2 border-white/30" />
+                          : <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center"><Store size={16} className="text-white/60" /></div>}
+                        <div>
+                          <p className="text-white font-bold text-sm">{store?.name || 'Your Business'}</p>
+                          <p className="text-white/50 text-[10px]">{previewStamps} stamps to redeem</p>
+                        </div>
+                      </div>
+                      {cardRewardInput && (
+                        <div className="bg-brand-gold/20 rounded-xl px-2.5 py-1">
+                          <p className="text-brand-gold text-[10px] font-bold">{cardRewardInput}</p>
+                        </div>
+                      )}
+                    </div>
+                    <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(previewStamps, 10)}, 1fr)` }}>
+                      {Array.from({ length: previewStamps }).map((_, i) => (
+                        <div key={i} className="aspect-square rounded-lg border border-dashed border-white/20 flex items-center justify-center">
+                          <span className="text-white/30 text-[8px] font-bold">{i + 1}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <button
               onClick={handleSaveCardSettings}
               disabled={isSavingCard}
               className="w-full bg-brand-navy text-white py-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
             >
-              {cardSaved ? <><CheckCircle2 size={16} /> Saved!</> : isSavingCard ? 'Saving...' : <><Save size={16} /> Save Card Settings</>}
+              {cardSaved ? <><CheckCircle2 size={16} /> Card Saved!</> : isSavingCard ? 'Saving...' : <><Save size={16} /> Save — Set as New Card</>}
             </button>
           </div>
 
