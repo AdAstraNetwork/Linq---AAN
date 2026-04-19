@@ -5481,7 +5481,7 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
   useEffect(() => {
     const cardId = `${user.uid}_${store.id}`;
     return onSnapshot(doc(db, 'cards', cardId), (snap) => {
-      if (snap.exists()) {
+      if (snap.exists() && !snap.data()?.isArchived) {
         setCard({ id: snap.id, ...snap.data() } as Card);
       } else {
         setCard(null);
