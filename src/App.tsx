@@ -3984,6 +3984,10 @@ function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onViewSto
 
   const handleAvatarClick = async () => {
     try {
+      if (post.authorRole === 'vendor' && post.storeId && onViewStore) {
+        const snap = await getDoc(doc(db, 'stores', post.storeId));
+        if (snap.exists()) { onViewStore({ id: snap.id, ...snap.data() } as StoreProfile); return; }
+      }
       const snap = await getDoc(doc(db, 'users', post.authorUid));
       if (snap.exists()) onViewUser({ uid: snap.id, ...snap.data() } as UserProfile);
     } catch {/* seed users may not exist */}
