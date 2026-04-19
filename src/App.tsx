@@ -148,6 +148,7 @@ interface UserProfile {
   email: string;
   photoURL: string;
   role: UserRole;
+  roleConfirmed?: boolean;
   total_cards_held: number;
   totalStamps: number;
   totalRedeemed: number;
@@ -271,6 +272,7 @@ export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsRoleSelection, setNeedsRoleSelection] = useState(false);
   const [activeTab, setActiveTab] = useState<string>('for-you');
   const [viewingStore, setViewingStore] = useState<StoreProfile | null>(null);
   const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
@@ -555,18 +557,8 @@ export default function App() {
       setUser(firebaseUser);
       if (firebaseUser) {
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        if (!userDoc.exists()) {
-          const newProfile: UserProfile = {
-            uid: firebaseUser.uid,
-            name: firebaseUser.displayName || 'Guest',
-            email: firebaseUser.email || '',
-            photoURL: firebaseUser.photoURL || '',
-            role: 'consumer',
-            total_cards_held: 0,
-            totalStamps: 0,
-            totalRedeemed: 0
-          };
-          await setDoc(doc(db, 'users', firebaseUser.uid), newProfile);
+        if (!userDoc.exists() || !userDoc.data()?.roleConfirmed) {
+          setNeedsRoleSelection(true);
         }
       }
       setLoading(false);
@@ -585,6 +577,28 @@ export default function App() {
 
   const handleLogout = () => signOut(auth);
 
+  const handleRoleSelect = async (role: 'consumer' | 'vendor') => {
+    if (!user) return;
+    const userRef = doc(db, 'users', user.uid);
+    const existing = await getDoc(userRef);
+    if (existing.exists()) {
+      await updateDoc(userRef, { role, roleConfirmed: true });
+    } else {
+      await setDoc(userRef, {
+        uid: user.uid,
+        name: user.displayName || 'Guest',
+        email: user.email || '',
+        photoURL: user.photoURL || '',
+        role,
+        roleConfirmed: true,
+        total_cards_held: 0,
+        totalStamps: 0,
+        totalRedeemed: 0
+      });
+    }
+    setNeedsRoleSelection(false);
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -600,6 +614,10 @@ export default function App() {
 
   if (!user) {
     return <LandingPage onLogin={handleLogin} />;
+  }
+
+  if (needsRoleSelection) {
+    return <RoleSelectionScreen user={user} onSelect={handleRoleSelect} />;
   }
 
   return (
@@ -797,6 +815,59 @@ function LandingPage({ onLogin }: { onLogin: () => void }) {
           Create Account
         </button>
       </div>
+    </div>
+  );
+}
+
+function RoleSelectionScreen({ user, onSelect }: { user: FirebaseUser, onSelect: (role: 'consumer' | 'vendor') => void }) {
+  const [selecting, setSelecting] = React.useState<'consumer' | 'vendor' | null>(null);
+  const handle = async (role: 'consumer' | 'vendor') => {
+    setSelecting(role);
+    await onSelect(role);
+  };
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center bg-brand-bg">
+      <div className="mb-8">
+        <div className="w-16 h-16 gradient-red rounded-[1.5rem] flex items-center justify-center mx-auto mb-4 shadow-lg shadow-red-500/20">
+          <Sparkles className="w-8 h-8 text-white" />
+        </div>
+        <h1 className="font-display font-bold text-3xl text-brand-navy mb-2">Welcome to <span className="text-brand-gold">Li</span>nq</h1>
+        <p className="text-brand-navy/50 text-sm">How would you like to use Linq?</p>
+      </div>
+
+      <div className="w-full max-w-xs space-y-4">
+        <button
+          onClick={() => handle('consumer')}
+          disabled={selecting !== null}
+          className="w-full bg-white border-2 border-brand-navy/10 rounded-[2rem] p-6 text-left flex items-center gap-4 hover:border-brand-gold/40 hover:shadow-md transition-all active:scale-[0.98] disabled:opacity-60"
+        >
+          <div className="w-12 h-12 bg-brand-gold/10 rounded-2xl flex items-center justify-center shrink-0">
+            <Wallet className="w-6 h-6 text-brand-gold" />
+          </div>
+          <div>
+            <p className="font-bold text-brand-navy text-base">I'm a Customer</p>
+            <p className="text-xs text-brand-navy/40 mt-0.5">Collect stamps & earn rewards</p>
+          </div>
+          {selecting === 'consumer' && <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="ml-auto"><Sparkles className="w-5 h-5 text-brand-gold" /></motion.div>}
+        </button>
+
+        <button
+          onClick={() => handle('vendor')}
+          disabled={selecting !== null}
+          className="w-full bg-brand-navy rounded-[2rem] p-6 text-left flex items-center gap-4 hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-60"
+        >
+          <div className="w-12 h-12 bg-white/10 rounded-2xl flex items-center justify-center shrink-0">
+            <Building2 className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <p className="font-bold text-white text-base">I'm a Business</p>
+            <p className="text-xs text-white/50 mt-0.5">Run a loyalty programme</p>
+          </div>
+          {selecting === 'vendor' && <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} className="ml-auto"><Sparkles className="w-5 h-5 text-white" /></motion.div>}
+        </button>
+      </div>
+
+      <p className="text-xs text-brand-navy/30 mt-8">You can update this later in your profile settings</p>
     </div>
   );
 }
@@ -2858,7 +2929,8 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
           </div>
         </div>
 
-        {/* Business Toggle */}
+        {/* Business Toggle — only visible for vendor accounts */}
+        {profile.role === 'vendor' && (
         <div className="glass-card p-5 rounded-[2rem] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-brand-navy/5 flex items-center justify-center">
@@ -2871,9 +2943,10 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
           </div>
           <ToggleSwitch on={isVendor} onChange={setIsVendor} />
         </div>
+        )}
 
         {/* Business Fields */}
-        {isVendor && (
+        {profile.role === 'vendor' && isVendor && (
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-5">
 
             <SectionLabel icon={<Building2 size={14} className="text-brand-gold" />} label="Business Details" />
@@ -4817,8 +4890,10 @@ function CommunityScreen({ onViewUser, currentUser }: { onViewUser: (u: UserProf
             <div className="space-y-4">
               <div className="bg-brand-navy p-6 rounded-[2.5rem] text-white flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 bg-brand-gold rounded-full flex items-center justify-center">
-                    <Trophy className="w-6 h-6 text-brand-navy" />
+                  <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-brand-gold shrink-0">
+                    {users[0]?.photoURL
+                      ? <img src={users[0].photoURL} alt="" className="w-full h-full object-cover" />
+                      : <div className="w-full h-full bg-brand-gold flex items-center justify-center"><Trophy className="w-6 h-6 text-brand-navy" /></div>}
                   </div>
                   <div>
                     <p className="text-xs text-white/60 font-bold uppercase tracking-widest">Top Collector</p>
@@ -4938,8 +5013,19 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
       orderBy('current_stamps', 'desc'),
       limit(5)
     );
-    return onSnapshot(q, (snap) => {
-      setLeaderboard(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    return onSnapshot(q, async (snap) => {
+      const cards = snap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+      const enriched = await Promise.all(cards.map(async (card) => {
+        if (card.user_id) {
+          const usnap = await getDoc(doc(db, 'users', card.user_id));
+          if (usnap.exists()) {
+            const u = usnap.data() as UserProfile;
+            return { ...card, userName: u.name || card.userName, userPhoto: u.photoURL || card.userPhoto };
+          }
+        }
+        return card;
+      }));
+      setLeaderboard(enriched);
     }, (err) => console.error("Store leaderboard listener:", err));
   }, [store.id]);
 
