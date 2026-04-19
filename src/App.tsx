@@ -723,30 +723,34 @@ export default function App() {
               }}
             />
           ) : profile?.role === 'consumer' ? (
-            <ConsumerApp 
-              key="consumer" 
-              activeTab={activeTab} 
-              setActiveTab={setActiveTab} 
-              profile={profile} 
-              user={user} 
+            <ConsumerApp
+              key="consumer"
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              profile={profile}
+              user={user}
               onViewStore={setViewingStore}
               onViewUser={handleViewUser}
               cards={userCards}
               notifications={notifications}
               activeChatId={activeChatId}
               setActiveChatId={setActiveChatId}
+              onLogout={handleLogout}
+              onDeleteAccount={handleDeleteAccount}
             />
           ) : (
-            <VendorApp 
-              key="vendor" 
-              activeTab={activeTab} 
-              setActiveTab={setActiveTab} 
-              profile={profile} 
-              user={user} 
+            <VendorApp
+              key="vendor"
+              activeTab={activeTab}
+              setActiveTab={setActiveTab}
+              profile={profile}
+              user={user}
               onViewUser={handleViewUser}
               notifications={notifications}
               activeChatId={activeChatId}
               setActiveChatId={setActiveChatId}
+              onLogout={handleLogout}
+              onDeleteAccount={handleDeleteAccount}
             />
           )}
         </AnimatePresence>
@@ -760,8 +764,6 @@ export default function App() {
             onClose={() => setShowSettings(false)}
             profile={profile}
             userCards={userCards}
-            onLogout={handleLogout}
-            onDeleteAccount={handleDeleteAccount}
           />
         )}
       </AnimatePresence>
@@ -941,7 +943,7 @@ function NavButton({ active, onClick, icon, label, badgeCount }: { active: boole
 
 // --- Consumer App ---
 
-function ConsumerApp({ activeTab, setActiveTab, profile, user, onViewStore, onViewUser, cards: initialCards, notifications, activeChatId, setActiveChatId }: { activeTab: string, setActiveTab: (tab: string) => void, profile: UserProfile | null, user: FirebaseUser, onViewStore: (s: StoreProfile) => void, onViewUser: (u: UserProfile) => void, cards: Card[], notifications: Notification[], activeChatId: string | null, setActiveChatId: (id: string | null) => void, key?: React.Key }) {
+function ConsumerApp({ activeTab, setActiveTab, profile, user, onViewStore, onViewUser, cards: initialCards, notifications, activeChatId, setActiveChatId, onLogout, onDeleteAccount }: { activeTab: string, setActiveTab: (tab: string) => void, profile: UserProfile | null, user: FirebaseUser, onViewStore: (s: StoreProfile) => void, onViewUser: (u: UserProfile) => void, cards: Card[], notifications: Notification[], activeChatId: string | null, setActiveChatId: (id: string | null) => void, onLogout: () => void, onDeleteAccount: () => Promise<void>, key?: React.Key }) {
   const [stores, setStores] = useState<StoreProfile[]>([]);
 
   useEffect(() => {
@@ -1044,11 +1046,12 @@ function ConsumerApp({ activeTab, setActiveTab, profile, user, onViewStore, onVi
       )}
 
       {activeTab === 'profile' && (
-        <ProfileScreen 
-          profile={profile} 
-          userCards={initialCards} 
-          onLogout={() => signOut(auth)} 
-          onViewUser={onViewUser} 
+        <ProfileScreen
+          profile={profile}
+          userCards={initialCards}
+          onLogout={onLogout}
+          onDeleteAccount={onDeleteAccount}
+          onViewUser={onViewUser}
           user={user}
         />
       )}
@@ -1058,7 +1061,7 @@ function ConsumerApp({ activeTab, setActiveTab, profile, user, onViewStore, onVi
 
 // --- Vendor App ---
 
-function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notifications, activeChatId, setActiveChatId }: { activeTab: string, setActiveTab: (tab: string) => void, profile: UserProfile | null, user: FirebaseUser, onViewUser: (u: UserProfile) => void, notifications: Notification[], activeChatId: string | null, setActiveChatId: (id: string | null) => void, key?: React.Key }) {
+function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notifications, activeChatId, setActiveChatId, onLogout, onDeleteAccount }: { activeTab: string, setActiveTab: (tab: string) => void, profile: UserProfile | null, user: FirebaseUser, onViewUser: (u: UserProfile) => void, notifications: Notification[], activeChatId: string | null, setActiveChatId: (id: string | null) => void, onLogout: () => void, onDeleteAccount: () => Promise<void>, key?: React.Key }) {
   const [store, setStore] = useState<StoreProfile | null>(null);
   const [userCards, setUserCards] = useState<Card[]>([]);
 
@@ -1357,11 +1360,12 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
 
       {activeTab === 'discover' && <CardBuilder store={store} />}
       {activeTab === 'profile' && (
-        <ProfileScreen 
-          profile={profile} 
+        <ProfileScreen
+          profile={profile}
           userCards={userCards}
-          onLogout={() => signOut(auth)} 
-          onViewUser={onViewUser} 
+          onLogout={onLogout}
+          onDeleteAccount={onDeleteAccount}
+          onViewUser={onViewUser}
           user={user}
         />
       )}
@@ -2206,7 +2210,7 @@ function CardBuilder({ store }: { store: StoreProfile | null }) {
   );
 }
 
-function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { profile: UserProfile | null, userCards: Card[], onLogout: () => void, onViewUser: (u: UserProfile) => void, user: FirebaseUser }) {
+function ProfileScreen({ profile, userCards, onLogout, onDeleteAccount, onViewUser, user }: { profile: UserProfile | null, userCards: Card[], onLogout: () => void, onDeleteAccount: () => Promise<void>, onViewUser: (u: UserProfile) => void, user: FirebaseUser }) {
   const [activeSubTab, setActiveSubTab] = useState<'posts' | 'interactions'>('posts');
   const [showProfileSettings, setShowProfileSettings] = useState(false);
   const profileLastDocRef = useRef<any>(null);
@@ -2371,7 +2375,7 @@ function ProfileScreen({ profile, userCards, onLogout, onViewUser, user }: { pro
   const settingsModal = (
     <AnimatePresence>
       {showProfileSettings && (
-        <ProfileSettingsModal profile={profile} user={user} onClose={() => setShowProfileSettings(false)} />
+        <ProfileSettingsModal profile={profile} user={user} onClose={() => setShowProfileSettings(false)} onLogout={onLogout} onDeleteAccount={onDeleteAccount} />
       )}
     </AnimatePresence>
   );
@@ -2857,7 +2861,7 @@ function ToggleSwitch({ on, onChange }: { on: boolean; onChange: (v: boolean) =>
   );
 }
 
-function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile, user: FirebaseUser, onClose: () => void }) {
+function ProfileSettingsModal({ profile, user, onClose, onLogout, onDeleteAccount }: { profile: UserProfile, user: FirebaseUser, onClose: () => void, onLogout: () => void, onDeleteAccount: () => Promise<void> }) {
   const [name, setName] = useState(profile.name || '');
   const [handle, setHandle] = useState(profile.handle || user.email?.split('@')[0] || '');
   const [store, setStore] = useState<StoreProfile | null>(null);
@@ -2869,6 +2873,8 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
   const [visibility, setVisibility] = useState({ members: true, stamps: true, activeCards: true, returnRate: true, followers: true });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (profile.role !== 'vendor') return;
@@ -3049,7 +3055,95 @@ function ProfileSettingsModal({ profile, user, onClose }: { profile: UserProfile
 
           </motion.div>
         )}
+
+        {/* Account Actions */}
+        <div className="pt-4 border-t border-brand-navy/10 space-y-3">
+          <button
+            onClick={async () => {
+              const newRole = profile.role === 'consumer' ? 'vendor' : 'consumer';
+              await updateDoc(doc(db, 'users', profile.uid), { role: newRole });
+              window.location.reload();
+            }}
+            className={`w-full py-4 px-5 rounded-2xl font-bold text-sm flex items-center gap-3 transition-all active:scale-[0.98] ${
+              profile.role === 'consumer'
+                ? 'bg-brand-navy text-white'
+                : 'bg-brand-gold text-brand-navy'
+            }`}
+          >
+            <LayoutDashboard size={18} />
+            Switch to {profile.role === 'consumer' ? 'Vendor' : 'Consumer'} Account
+          </button>
+
+          <button
+            onClick={onLogout}
+            className="w-full py-4 px-5 rounded-2xl text-red-500 font-bold text-sm flex items-center gap-3 hover:bg-red-50 transition-colors"
+          >
+            <LogOut size={18} />
+            Sign Out
+          </button>
+
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="w-full py-4 px-5 rounded-2xl text-red-400/70 text-sm flex items-center gap-3 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 size={18} />
+            Delete Account
+          </button>
+        </div>
+
       </div>
+
+      {/* Delete confirmation overlay */}
+      <AnimatePresence>
+        {showDeleteConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-10 flex items-end justify-center bg-black/40 backdrop-blur-sm pb-8 px-6"
+            onClick={() => !deleting && setShowDeleteConfirm(false)}
+          >
+            <motion.div
+              initial={{ y: 60, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 60, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="w-full bg-white rounded-[2.5rem] p-8 space-y-6"
+              onClick={e => e.stopPropagation()}
+            >
+              <div className="text-center space-y-2">
+                <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Trash2 size={24} className="text-red-500" />
+                </div>
+                <h3 className="font-display font-bold text-xl text-brand-navy">Delete Account?</h3>
+                <p className="text-sm text-brand-navy/50">This permanently removes your profile, posts, and follow connections. Your stamp history and loyalty cards will remain.</p>
+              </div>
+              <div className="space-y-3">
+                <button
+                  onClick={async () => {
+                    setDeleting(true);
+                    try { await onDeleteAccount(); } catch { setDeleting(false); }
+                  }}
+                  disabled={deleting}
+                  className="w-full bg-red-500 text-white font-bold py-4 rounded-2xl hover:bg-red-600 active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {deleting
+                    ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={18} /></motion.div>
+                    : <Trash2 size={18} />}
+                  {deleting ? 'Deleting…' : 'Yes, Delete My Account'}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="w-full py-4 rounded-2xl text-brand-navy/60 font-bold text-sm hover:bg-brand-navy/5 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
@@ -3067,21 +3161,15 @@ function SettingsMenu({
   isOpen,
   onClose,
   profile,
-  onLogout,
-  onDeleteAccount,
   userCards
 }: {
   isOpen: boolean,
   onClose: () => void,
   profile: UserProfile | null,
-  onLogout: () => void,
-  onDeleteAccount: () => Promise<void>,
   userCards: Card[]
 }) {
   const [showArchive, setShowArchive] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [isSeeding, setIsSeeding] = useState(false);
   const [archivedCards, setArchivedCards] = useState<Card[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -3468,75 +3556,7 @@ function SettingsMenu({
           <MenuButton icon={<Settings />} label="Settings" sub="Account preferences" />
           <MenuButton icon={<Sparkles />} label="Seed Sample Data" sub="Generate test users & stamps" onClick={seedData} disabled={isSeeding} />
           
-          <div className="pt-4 border-t border-brand-navy/5 space-y-1">
-            <button
-              onClick={onLogout}
-              className="w-full p-4 rounded-2xl text-red-500 font-bold text-sm flex items-center gap-3 hover:bg-red-50 transition-colors"
-            >
-              <LogOut size={20} />
-              Sign Out
-            </button>
-            <button
-              onClick={() => setShowDeleteConfirm(true)}
-              className="w-full p-4 rounded-2xl text-red-400/70 text-sm flex items-center gap-3 hover:bg-red-50 transition-colors"
-            >
-              <Trash2 size={18} />
-              Delete Account
-            </button>
-          </div>
-
         </div>
-
-        <AnimatePresence>
-          {showDeleteConfirm && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm px-4 pb-8"
-              onClick={() => !deleting && setShowDeleteConfirm(false)}
-            >
-              <motion.div
-                initial={{ y: 60, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                exit={{ y: 60, opacity: 0 }}
-                transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-                className="w-full max-w-md bg-white rounded-[2.5rem] p-8 space-y-6"
-                onClick={e => e.stopPropagation()}
-              >
-                <div className="text-center space-y-2">
-                  <div className="w-14 h-14 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <Trash2 size={24} className="text-red-500" />
-                  </div>
-                  <h3 className="font-display font-bold text-xl text-brand-navy">Delete Account?</h3>
-                  <p className="text-sm text-brand-navy/50">This will permanently remove your profile, posts, and all follow connections. Your stamp history and loyalty cards will remain.</p>
-                </div>
-                <div className="space-y-3">
-                  <button
-                    onClick={async () => {
-                      setDeleting(true);
-                      try { await onDeleteAccount(); } catch { setDeleting(false); }
-                    }}
-                    disabled={deleting}
-                    className="w-full bg-red-500 text-white font-bold py-4 rounded-2xl hover:bg-red-600 active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
-                  >
-                    {deleting
-                      ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={18} /></motion.div>
-                      : <Trash2 size={18} />}
-                    {deleting ? 'Deleting…' : 'Yes, Delete My Account'}
-                  </button>
-                  <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    disabled={deleting}
-                    className="w-full py-4 rounded-2xl text-brand-navy/60 font-bold text-sm hover:bg-brand-navy/5 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         <AnimatePresence>
           {showArchive && (
