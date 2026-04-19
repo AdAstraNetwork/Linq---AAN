@@ -180,6 +180,7 @@ interface StoreProfile {
   location?: string;
   lat?: number;
   lng?: number;
+  rewardTiers?: { stamps: number; reward: string }[];
   visibilitySettings?: {
     members?: boolean;
     stamps?: boolean;
@@ -1970,53 +1971,73 @@ function LoyaltyCard({ card, store, onViewStore }: { card: Card, store?: StorePr
           </div>
         </div>
 
-        {card.isRedeemed ? (
-          <div className="space-y-4">
-            <div className="bg-green-50 p-4 rounded-2xl border border-green-100 text-center">
-              <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
-              <p className="text-xs font-bold uppercase tracking-widest text-green-600/60">Reward Claimed</p>
-              <p className="font-bold text-green-700">Enjoy your reward!</p>
-            </div>
-            <button 
-              onClick={handleReset}
-              className="w-full py-3 rounded-2xl bg-brand-navy text-white text-xs font-bold uppercase tracking-widest hover:bg-brand-navy/90 transition-all"
-            >
-              Start New Card
-            </button>
-          </div>
-        ) : isCompleted ? (
-          <div className="space-y-4">
-            <div className="glass-card p-4 rounded-2xl border border-brand-gold/20 text-center">
-              <Gift className="w-8 h-8 text-brand-gold mx-auto mb-2" />
-              <p className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Your Reward</p>
-              <p className="font-bold text-brand-navy">Free Gift / Discount</p>
-            </div>
-            <button 
-              onClick={() => setShowCompletionPopup(true)}
-              className="w-full py-3 rounded-2xl bg-brand-navy text-white text-xs font-bold uppercase tracking-widest hover:bg-brand-navy/90 transition-all"
-            >
-              Claim Reward
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-5 gap-3 mb-6">
-              {Array.from({ length: limit }).map((_, i) => (
-                <div key={i} className={cn(
-                  "aspect-square rounded-full border-2 flex items-center justify-center transition-all",
-                  i < card.current_stamps ? "bg-brand-gold border-brand-gold text-brand-navy" : "border-dashed border-brand-navy/10 text-brand-navy/10"
-                )}>
-                  {i < card.current_stamps ? <CheckCircle2 size={16} /> : <span className="text-[10px] font-bold">{i + 1}</span>}
-                </div>
-              ))}
-            </div>
+        {(() => {
+          const cardTheme = store?.theme || '#1e3a5f';
+          const rewardTiers = store?.rewardTiers?.length ? store.rewardTiers : [{ stamps: limit, reward: store?.reward || '' }];
+          const tierStamps = new Set(rewardTiers.map(t => t.stamps));
+          const nextTier = rewardTiers.find(t => t.stamps > card.current_stamps);
+          const currentTierReward = [...rewardTiers].reverse().find(t => t.stamps <= card.current_stamps);
 
-            <div className="flex items-center justify-between text-xs font-bold uppercase tracking-widest">
-              <span className="text-brand-navy/40">{card.current_stamps} / {limit} Stamps</span>
-              {card.current_stamps >= limit - 1 && <span className="text-brand-gold">Almost there!</span>}
+          if (card.isRedeemed) return (
+            <div className="space-y-4">
+              <div className="rounded-2xl p-4 text-center" style={{ background: `${cardTheme}22`, border: `1px solid ${cardTheme}44` }}>
+                <CheckCircle2 className="w-8 h-8 text-green-500 mx-auto mb-2" />
+                <p className="text-xs font-bold uppercase tracking-widest text-green-600/60">Reward Claimed</p>
+                <p className="font-bold">Enjoy your reward!</p>
+              </div>
+              <button onClick={handleReset} className="w-full py-3 rounded-2xl text-white text-xs font-bold uppercase tracking-widest transition-all" style={{ backgroundColor: cardTheme }}>
+                Start New Card
+              </button>
             </div>
-          </>
-        )}
+          );
+
+          if (isCompleted) return (
+            <div className="space-y-4">
+              <div className="rounded-2xl p-4 text-center" style={{ background: `${cardTheme}22`, border: `1px solid ${cardTheme}44` }}>
+                <Gift className="w-8 h-8 text-brand-gold mx-auto mb-2" />
+                <p className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Your Reward</p>
+                <p className="font-bold">{rewardTiers[rewardTiers.length - 1]?.reward || 'Reward Unlocked!'}</p>
+              </div>
+              <button onClick={() => setShowCompletionPopup(true)} className="w-full py-3 rounded-2xl text-white text-xs font-bold uppercase tracking-widest transition-all" style={{ backgroundColor: cardTheme }}>
+                Claim Reward
+              </button>
+            </div>
+          );
+
+          return (
+            <div className="rounded-[1.5rem] p-4 space-y-4" style={{ background: `linear-gradient(135deg, ${cardTheme} 0%, ${cardTheme}cc 100%)` }}>
+              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(limit, 10)}, 1fr)` }}>
+                {Array.from({ length: limit }).map((_, i) => {
+                  const stampNum = i + 1;
+                  const isFilled = i < card.current_stamps;
+                  const isTier = tierStamps.has(stampNum);
+                  return (
+                    <div key={i} className={cn(
+                      "aspect-square rounded-xl border flex items-center justify-center transition-all",
+                      isFilled
+                        ? isTier ? "bg-brand-gold border-brand-gold" : "bg-white/30 border-white/50"
+                        : isTier ? "border-white/60 bg-white/10" : "border-dashed border-white/25"
+                    )}>
+                      {isFilled
+                        ? isTier ? <Gift size={11} className="text-brand-navy" /> : <CheckCircle2 size={11} className="text-white" />
+                        : isTier ? <Gift size={10} className="text-white/60" /> : <span className="text-white/30 text-[8px] font-bold">{stampNum}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-white/60 text-xs font-bold">{card.current_stamps} / {limit} Stamps</span>
+                {nextTier && <span className="text-white/50 text-[10px]">{nextTier.stamps - card.current_stamps} to <span className="text-white font-semibold">{nextTier.reward}</span></span>}
+              </div>
+              {currentTierReward && (
+                <div className="bg-white/10 border border-white/20 rounded-xl px-3 py-2 flex items-center gap-2">
+                  <Gift size={12} className="text-brand-gold flex-shrink-0" />
+                  <p className="text-white/80 text-[11px] font-medium">Unlocked: <span className="font-bold text-white">{currentTierReward.reward}</span></p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </motion.div>
 
       <AnimatePresence>
@@ -2544,27 +2565,52 @@ function Modal({ title, children, onClose }: { title: string, children: React.Re
 }
 
 function CardBuilder({ store }: { store: StoreProfile | null }) {
-  const [stampsRequired, setStampsRequired] = useState(store?.stamps_required_for_reward || 10);
-  const [reward, setReward] = useState(store?.reward || '');
-  const [theme, setTheme] = useState(store?.theme || '#1e3a5f');
+  const initTiers = (s: StoreProfile | null) => {
+    if (s?.rewardTiers?.length) return s.rewardTiers;
+    const total = s?.stamps_required_for_reward || 10;
+    return [{ stamps: total, reward: s?.reward || '' }];
+  };
+
+  const [numTiers, setNumTiers] = useState(() => store?.rewardTiers?.length || 1);
+  const [tiers, setTiers] = useState<{ stamps: number; reward: string }[]>(() => initTiers(store));
+  const [theme, setTheme] = useState(store?.theme || '#1a1a2e');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (store) {
-      setStampsRequired(store.stamps_required_for_reward || 10);
-      setReward(store.reward || '');
-      setTheme(store.theme || '#1e3a5f');
-    }
+    if (!store) return;
+    const loaded = initTiers(store);
+    setNumTiers(loaded.length);
+    setTiers(loaded);
+    setTheme(store.theme || '#1a1a2e');
   }, [store?.id]);
+
+  // When numTiers changes, resize tiers array
+  useEffect(() => {
+    setTiers(prev => {
+      const next = Array.from({ length: numTiers }, (_, i) => prev[i] ?? { stamps: 0, reward: '' });
+      // Auto-space stamp counts evenly if not set
+      return next.map((t, i) => ({
+        ...t,
+        stamps: t.stamps > 0 ? t.stamps : Math.round((i + 1) * (prev[prev.length - 1]?.stamps || 10) / numTiers),
+      }));
+    });
+  }, [numTiers]);
+
+  const updateTier = (i: number, field: 'stamps' | 'reward', val: string) => {
+    setTiers(prev => prev.map((t, idx) => idx === i ? { ...t, [field]: field === 'stamps' ? Math.max(1, parseInt(val) || 1) : val } : t));
+  };
 
   const handleSave = async () => {
     if (!store) return;
     setSaving(true);
     try {
+      const sorted = [...tiers].sort((a, b) => a.stamps - b.stamps);
+      const topTier = sorted[sorted.length - 1];
       await updateDoc(doc(db, 'stores', store.id), {
-        stamps_required_for_reward: stampsRequired,
-        reward: reward.trim(),
+        rewardTiers: sorted,
+        stamps_required_for_reward: topTier.stamps,
+        reward: topTier.reward,
         theme,
       });
       setSaved(true);
@@ -2576,59 +2622,75 @@ function CardBuilder({ store }: { store: StoreProfile | null }) {
     }
   };
 
-  const THEMES = ['#1e3a5f', '#b8860b', '#10B981', '#7C3AED', '#EF4444', '#0891b2'];
+  const DARK_THEMES = ['#1a1a2e', '#0f2027', '#1e3a5f', '#2d1b69', '#1a0a00', '#003d2e'];
+  const totalStamps = tiers[tiers.length - 1]?.stamps || 10;
+  const tierStampSet = new Set(tiers.map(t => t.stamps));
 
   return (
     <div className="space-y-6 pb-20">
       <header>
         <h2 className="font-display text-3xl font-bold mb-1">Card Builder</h2>
-        <p className="text-brand-navy/60">Configure your loyalty stamp card.</p>
+        <p className="text-brand-navy/60">Design your loyalty reward tiers.</p>
       </header>
 
-      <div className="glass-card p-6 rounded-[2.5rem] space-y-5">
+      <div className="glass-card p-6 rounded-[2.5rem] space-y-6">
 
+        {/* Number of reward stages */}
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Stamps Required for Reward</label>
-          <input
-            type="number"
-            min="1"
-            max="50"
-            value={stampsRequired}
-            onChange={e => setStampsRequired(Math.max(1, parseInt(e.target.value) || 1))}
-            className="w-full px-5 py-4 rounded-2xl bg-brand-bg border border-brand-navy/10 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
-          />
+          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Number of Reward Stages</label>
+          <div className="relative">
+            <select
+              value={numTiers}
+              onChange={e => setNumTiers(parseInt(e.target.value))}
+              className="w-full px-5 py-4 rounded-2xl bg-brand-bg border border-brand-navy/10 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-brand-gold/30 appearance-none"
+            >
+              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} {n === 1 ? 'Stage' : 'Stages'}</option>)}
+            </select>
+            <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-brand-navy/40 pointer-events-none" />
+          </div>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Reward (e.g. Free Coffee)</label>
-          <input
-            value={reward}
-            onChange={e => setReward(e.target.value)}
-            placeholder="e.g. Free coffee, Free class..."
-            className="w-full px-5 py-4 rounded-2xl bg-brand-bg border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
-          />
+        {/* Tier inputs */}
+        <div className="space-y-3">
+          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Reward at Each Stage</label>
+          {tiers.slice(0, numTiers).map((tier, i) => (
+            <div key={i} className="flex gap-3 items-center">
+              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-brand-gold/10 flex items-center justify-center">
+                <span className="text-xs font-extrabold text-brand-gold">{i + 1}</span>
+              </div>
+              <input
+                type="number"
+                min="1"
+                value={tier.stamps}
+                onChange={e => updateTier(i, 'stamps', e.target.value)}
+                className="w-20 px-3 py-3 rounded-2xl bg-brand-bg border border-brand-navy/10 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
+                placeholder="Stamps"
+              />
+              <input
+                value={tier.reward}
+                onChange={e => updateTier(i, 'reward', e.target.value)}
+                placeholder={i === numTiers - 1 ? 'e.g. Free coffee (top reward)' : `e.g. Stage ${i + 1} reward`}
+                className="flex-1 px-4 py-3 rounded-2xl bg-brand-bg border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30"
+              />
+            </div>
+          ))}
+          <p className="text-[11px] text-brand-navy/30 pl-1">Set the stamp count and reward name for each stage. Stage {numTiers} is the top reward.</p>
         </div>
 
+        {/* Card colour — dark only */}
         <div className="space-y-2">
-          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Card Colour</label>
+          <label className="text-xs font-bold uppercase tracking-widest text-brand-navy/40">Card Colour (Dark)</label>
           <div className="flex gap-3 flex-wrap">
-            {THEMES.map(c => (
-              <button
-                key={c}
-                onClick={() => setTheme(c)}
-                className={cn("w-10 h-10 rounded-2xl transition-all border-2", theme === c ? "border-brand-gold scale-110 shadow-lg" : "border-transparent")}
+            {DARK_THEMES.map(c => (
+              <button key={c} onClick={() => setTheme(c)}
+                className={cn("w-10 h-10 rounded-2xl border-2 transition-all", theme === c ? "border-brand-gold scale-110 shadow-lg" : "border-white/20")}
                 style={{ backgroundColor: c }}
               />
             ))}
             <div className="relative w-10 h-10">
-              <input
-                type="color"
-                value={theme}
-                onChange={e => setTheme(e.target.value)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-              />
-              <div className="w-10 h-10 rounded-2xl border-2 border-dashed border-brand-navy/20 flex items-center justify-center">
-                <Palette size={14} className="text-brand-navy/40" />
+              <input type="color" value={theme} onChange={e => setTheme(e.target.value)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+              <div className="w-10 h-10 rounded-2xl border-2 border-dashed border-brand-navy/20 flex items-center justify-center" style={{ backgroundColor: theme }}>
+                <Palette size={14} className="text-white/60" />
               </div>
             </div>
           </div>
@@ -2637,41 +2699,54 @@ function CardBuilder({ store }: { store: StoreProfile | null }) {
         {/* Live preview */}
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40 mb-3">Live Preview</p>
-          <div className="rounded-[1.75rem] p-5 space-y-4" style={{ background: `linear-gradient(135deg, ${theme}, ${theme}bb)` }}>
+          <div className="rounded-[2rem] p-5 space-y-4" style={{ background: `linear-gradient(135deg, ${theme} 0%, ${theme}dd 100%)` }}>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 {store?.logoUrl
                   ? <img src={store.logoUrl} alt="" className="w-11 h-11 rounded-2xl object-cover border-2 border-white/30" />
-                  : <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center"><Store size={18} className="text-white/60" /></div>}
+                  : <div className="w-11 h-11 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center"><Store size={18} className="text-white/50" /></div>}
                 <div>
                   <p className="text-white font-bold">{store?.name || 'Your Business'}</p>
-                  <p className="text-white/50 text-xs">{stampsRequired} stamps to redeem</p>
+                  <p className="text-white/50 text-xs">{totalStamps} stamps · {numTiers} reward{numTiers > 1 ? 's' : ''}</p>
                 </div>
               </div>
-              {reward && (
-                <div className="bg-white/20 rounded-xl px-3 py-1">
-                  <p className="text-white text-xs font-bold">{reward}</p>
+              {tiers[numTiers - 1]?.reward && (
+                <div className="bg-white/10 border border-white/20 rounded-xl px-2.5 py-1">
+                  <p className="text-white text-[10px] font-bold">{tiers[numTiers - 1].reward}</p>
                 </div>
               )}
             </div>
-            <div className="grid gap-2" style={{ gridTemplateColumns: `repeat(${Math.min(stampsRequired, 10)}, 1fr)` }}>
-              {Array.from({ length: stampsRequired }).map((_, i) => (
-                <div key={i} className="aspect-square rounded-xl border border-dashed border-white/25 flex items-center justify-center">
-                  <span className="text-white/30 text-[9px] font-bold">{i + 1}</span>
-                </div>
-              ))}
+            <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(totalStamps, 10)}, 1fr)` }}>
+              {Array.from({ length: totalStamps }).map((_, i) => {
+                const stampNum = i + 1;
+                const tier = tiers.slice(0, numTiers).find(t => t.stamps === stampNum);
+                return (
+                  <div key={i} className={cn("aspect-square rounded-xl border flex items-center justify-center relative", tier ? "border-white/60 bg-white/10" : "border-dashed border-white/20")}>
+                    {tier ? <Gift size={10} className="text-white/80" /> : <span className="text-white/25 text-[8px] font-bold">{stampNum}</span>}
+                  </div>
+                );
+              })}
             </div>
-            <p className="text-white/40 text-xs text-center">{stampsRequired} / {stampsRequired} Stamps</p>
+            {numTiers > 1 && (
+              <div className="space-y-1">
+                {tiers.slice(0, numTiers).map((t, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-white/10 border border-white/30 flex items-center justify-center flex-shrink-0">
+                      <span className="text-white/60 text-[8px] font-bold">{i + 1}</span>
+                    </div>
+                    <p className="text-white/50 text-[10px]">{t.stamps} stamps → <span className="text-white/80 font-semibold">{t.reward || '—'}</span></p>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-white/30 text-[10px] text-right">0 / {totalStamps} Stamps</p>
           </div>
         </div>
 
-        <p className="text-xs text-brand-navy/40">Users currently collecting stamps finish their card at the old count. The new settings apply from the next cycle onwards.</p>
+        <p className="text-xs text-brand-navy/40">Existing cards finish their current cycle first. New cycles use these settings.</p>
 
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="w-full bg-brand-navy text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all"
-        >
+        <button onClick={handleSave} disabled={saving}
+          className="w-full bg-brand-navy text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 disabled:opacity-50 transition-all">
           {saved ? <><CheckCircle2 size={16} /> Saved!</> : saving ? 'Saving...' : <><Save size={16} /> Save — Set as New Card</>}
         </button>
       </div>
