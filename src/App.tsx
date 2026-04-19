@@ -2024,7 +2024,7 @@ function LoyaltyCard({ card, store, onViewStore }: { card: Card, store?: StorePr
 
           return (
             <div className="rounded-[1.5rem] p-4 space-y-4" style={{ background: `linear-gradient(135deg, ${cardTheme} 0%, ${cardTheme}cc 100%)` }}>
-              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(${Math.min(limit, 5)}, 1fr)` }}>
+              <div className="grid gap-1.5" style={{ gridTemplateColumns: `repeat(5, 1fr)` }}>
                 {Array.from({ length: limit }).map((_, i) => {
                   const stampNum = i + 1;
                   const isFilled = i < card.current_stamps;
