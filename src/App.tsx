@@ -3164,7 +3164,7 @@ function ProfileSettingsModal({ profile, user, onClose, onLogout, onDeleteAccoun
       if (profile.role === 'vendor' && store) {
         await updateDoc(doc(db, 'stores', store.id), {
           name: storeName, reward: storeReward, category: storeCategory, theme: storeTheme,
-          logoUrl: storeLogo, location: storeLocation, visibilitySettings: visibility,
+          logoUrl: storeLogo, location: storeLocation, address: storeLocation, visibilitySettings: visibility,
         });
       }
 
@@ -3263,12 +3263,31 @@ function ProfileSettingsModal({ profile, user, onClose, onLogout, onDeleteAccoun
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">Location</label>
-              <div className="relative">
-                <MapPin size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-navy/30" />
-                <input value={storeLocation} onChange={e => setStoreLocation(e.target.value)} placeholder="123 High Street, London"
-                  className="w-full pl-10 pr-5 py-4 rounded-2xl bg-white border border-brand-navy/10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30" />
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-brand-navy/50 uppercase tracking-widest">
+                  Business Address <span className="text-red-400">*</span>
+                </label>
+                {!storeLocation && (
+                  <span className="text-[10px] font-bold text-brand-gold bg-brand-gold/10 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <MapPin size={9} /> Required for nearby discovery
+                  </span>
+                )}
               </div>
+              <div className="relative">
+                <MapPin size={15} className={cn("absolute left-4 top-1/2 -translate-y-1/2", storeLocation ? "text-brand-navy/30" : "text-brand-gold")} />
+                <input
+                  value={storeLocation}
+                  onChange={e => setStoreLocation(e.target.value)}
+                  placeholder="e.g. 123 High Street, London, UK"
+                  className={cn(
+                    "w-full pl-10 pr-5 py-4 rounded-2xl bg-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-brand-gold/30 border",
+                    storeLocation ? "border-brand-navy/10" : "border-brand-gold/50"
+                  )}
+                />
+              </div>
+              {!storeLocation && (
+                <p className="text-[11px] text-brand-navy/40 pl-1">Enter your full address so customers nearby can discover you in the Hot tab.</p>
+              )}
             </div>
 
             <div className="space-y-2">
