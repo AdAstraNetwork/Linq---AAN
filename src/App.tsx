@@ -268,7 +268,9 @@ interface GlobalPost {
   toName?: string;
   toPhoto?: string;
   content: string;
-  postType: 'post' | 'poll';
+  postType: 'post' | 'poll' | 'review';
+  rating?: number;
+  storeReviewId?: string;
   pollOptions?: { text: string }[];
   pollVotes?: { [key: string]: string[] };
   createdAt: any;
@@ -4170,6 +4172,14 @@ function FeedPostCard({ post, currentUser, currentProfile, onViewUser, onViewSto
           </div>
         </div>
 
+        {post.postType === 'review' && (
+          <div className="flex items-center gap-0.5">
+            {[1,2,3,4,5].map(s => (
+              <Star key={s} size={13} className={s <= (post.rating || 5) ? "text-brand-gold fill-brand-gold" : "text-brand-navy/20"} />
+            ))}
+            <span className="ml-1.5 text-xs text-brand-navy/40 font-medium">review for <span className="font-bold text-brand-gold">{post.storeName}</span></span>
+          </div>
+        )}
         {post.content && (
           <p className="text-sm text-brand-navy leading-relaxed">{post.content}</p>
         )}
@@ -5652,15 +5662,34 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
     try {
       const authorName = profile?.name || user.displayName || 'Anonymous';
       const authorPhoto = profile?.photoURL || user.photoURL || '';
-      await addDoc(collection(db, 'store_reviews'), {
+      const content = reviewText.trim();
+
+      const reviewRef = await addDoc(collection(db, 'store_reviews'), {
         storeId: store.id,
         authorUid: user.uid,
         authorName,
         authorPhoto,
         rating: reviewRating,
-        content: reviewText.trim(),
+        content,
         createdAt: serverTimestamp(),
       });
+
+      await addDoc(collection(db, 'global_posts'), {
+        authorUid: user.uid,
+        authorName,
+        authorPhoto,
+        authorRole: 'consumer',
+        storeId: store.id,
+        storeName: store.name,
+        postType: 'review',
+        rating: reviewRating,
+        content,
+        storeReviewId: reviewRef.id,
+        createdAt: serverTimestamp(),
+        likesCount: 0,
+        likedBy: [],
+      });
+
       setReviewText('');
       setReviewRating(5);
     } catch (err) {
