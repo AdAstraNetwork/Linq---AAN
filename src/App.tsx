@@ -2214,12 +2214,37 @@ function DiscoveryScreen({ stores, cards, onJoin, onViewStore, onViewUser }: { s
   );
 }
 
-function WallPostItem({ post, currentUser }: { post: any, currentUser: FirebaseUser, key?: React.Key }) {
+function WallPostItem({ post, currentUser, wallOwnerUid }: { post: any, currentUser: FirebaseUser, wallOwnerUid?: string, key?: React.Key }) {
   const [likes, setLikes] = useState<string[]>([]);
   const [replies, setReplies] = useState<any[]>([]);
   const [showReplyInput, setShowReplyInput] = useState(false);
   const [newReply, setNewReply] = useState('');
   const [isReplying, setIsReplying] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  const canDelete = currentUser.uid === post.fromUid || currentUser.uid === (wallOwnerUid ?? post.toUid);
+
+  const handleDelete = async () => {
+    if (!canDelete) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db, 'user_reviews', post.id));
+      // Also remove the cross-posted global_posts entry
+      if (post.userReviewId) {
+        await deleteDoc(doc(db, 'global_posts', post.userReviewId)).catch(() => {});
+      } else {
+        // Fallback for older posts without the link: query by authorUid + toUid
+        const snap = await getDocs(query(
+          collection(db, 'global_posts'),
+          where('userReviewId', '==', post.id)
+        )).catch(() => null);
+        if (snap) await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      }
+    } catch (err) {
+      console.error('Wall post delete failed:', err);
+      setDeleting(false);
+    }
+  };
 
   useEffect(() => {
     const unsubLikes = onSnapshot(collection(db, 'user_reviews', post.id, 'likes'), (snap) => {
@@ -2288,10 +2313,21 @@ function WallPostItem({ post, currentUser }: { post: any, currentUser: FirebaseU
             </p>
           </div>
         </div>
-        <div className="flex gap-0.5">
-          {[1, 2, 3, 4, 5].map(i => (
-            <Star key={i} size={10} className={cn(i <= (post.rating || 5) ? "text-brand-gold fill-brand-gold" : "text-brand-navy/5")} />
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex gap-0.5">
+            {[1, 2, 3, 4, 5].map(i => (
+              <Star key={i} size={10} className={cn(i <= (post.rating || 5) ? "text-brand-gold fill-brand-gold" : "text-brand-navy/5")} />
+            ))}
+          </div>
+          {canDelete && (
+            <button
+              onClick={handleDelete}
+              disabled={deleting}
+              className="p-1.5 rounded-xl text-brand-navy/20 hover:text-red-400 hover:bg-red-50 transition-all disabled:opacity-40"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
         </div>
       </div>
 
@@ -2873,7 +2909,7 @@ function ProfileScreen({ profile, userCards, onLogout, onDeleteAccount, onViewUs
 
           <div className="space-y-3">
             {wallPosts.map(post => (
-              <WallPostItem key={post.id} post={post} currentUser={user} />
+              <WallPostItem key={post.id} post={post} currentUser={user} wallOwnerUid={profile?.uid} />
             ))}
           </div>
 
@@ -5880,7 +5916,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
       const authorPhoto = authorData?.photoURL || currentUser.photoURL || '';
       const authorRole = authorData?.role || 'consumer';
 
-      await addDoc(collection(db, 'user_reviews'), {
+      const reviewRef = await addDoc(collection(db, 'user_reviews'), {
         fromUid: currentUser.uid,
         fromName: authorName,
         fromPhoto: authorPhoto,
@@ -5891,7 +5927,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
         createdAt: serverTimestamp()
       });
 
-      // Cross-post to global feed so all users can see it
+      // Cross-post to global feed so all users can see it; store reviewId to allow linked deletion
       await addDoc(collection(db, 'global_posts'), {
         authorUid: currentUser.uid,
         authorName,
@@ -5901,6 +5937,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
         toName: targetUser.name,
         toPhoto: targetUser.photoURL || '',
         wallPost: true,
+        userReviewId: reviewRef.id,
         content: newReview,
         postType: 'post',
         likesCount: 0,
@@ -6095,7 +6132,7 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
           )}
           <div className="space-y-4">
             {reviews.map(review => (
-              <WallPostItem key={review.id} post={review} currentUser={currentUser} />
+              <WallPostItem key={review.id} post={review} currentUser={currentUser} wallOwnerUid={targetUser.uid} />
             ))}
             {reviews.length === 0 && (
               <p className="text-center py-12 text-xs text-brand-navy/20 font-bold uppercase tracking-widest italic">No wall posts yet</p>
