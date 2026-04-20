@@ -4917,6 +4917,38 @@ function NotificationsPanel({ notifications, onClose }: { notifications: Notific
   );
 }
 
+const DEAL_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#F7A35C', '#DDA0DD', '#F7DC6F', '#A8E6CF'];
+
+function FeedVendorPostCard({ item }: { item: any }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5 rounded-[2rem] space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 shrink-0">
+          <img src={item.authorPhoto || `https://picsum.photos/seed/${item.authorUid}/40`} alt="" className="w-full h-full object-cover" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-bold text-sm truncate">{item.authorName}</p>
+            <span className="px-2 py-0.5 bg-brand-gold/10 rounded-full text-[9px] font-bold text-brand-gold uppercase shrink-0">Store</span>
+          </div>
+          <p className="text-[10px] text-brand-navy/40">{item.createdAt ? format(item.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}</p>
+        </div>
+      </div>
+      <p className="text-sm text-brand-navy/90 leading-relaxed">{item.content}</p>
+    </motion.div>
+  );
+}
+
+function FeedLoadingSpinner() {
+  return (
+    <div className="flex justify-center py-12">
+      <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
+        <Sparkles className="w-8 h-8 text-brand-gold" />
+      </motion.div>
+    </div>
+  );
+}
+
 function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile, userCards = [] }: { onViewUser: (u: UserProfile) => void, onViewStore?: (s: StoreProfile) => void, currentUser?: FirebaseUser, currentProfile?: UserProfile | null, userCards?: Card[] }) {
   const [globalPosts, setGlobalPosts] = useState<GlobalPost[]>([]);
   const [vendorPosts, setVendorPosts] = useState<any[]>([]);
@@ -4927,7 +4959,8 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile, us
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [activeSubTab, setActiveSubTab] = useState<'all' | 'hot'>('all');
+  const [activeSubTab, setActiveSubTab] = useState<'discovery' | 'following'>('discovery');
+  const [showAllDeals, setShowAllDeals] = useState(false);
   const lastDocRef = useRef<any>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
@@ -4977,7 +5010,7 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile, us
   useEffect(() => {
     const unsubVendor = onSnapshot(
       query(collectionGroup(db, 'posts'), orderBy('createdAt', 'desc'), limit(20)),
-      (snap) => setVendorPosts(snap.docs.map(d => ({ id: d.id, _type: 'vendor', ...d.data() }))),
+      (snap) => setVendorPosts(snap.docs.map(d => ({ id: d.id, _type: 'vendor', storeId: d.ref.parent.parent?.id, ...d.data() }))),
       (err) => console.error("vendor posts:", err)
     );
     return () => unsubVendor();
@@ -5131,10 +5164,16 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile, us
 
   const displayFeed = sortedFeed;
 
+  const followingFeed = sortedFeed.filter(item => {
+    if (!item._type) return followingUids.has(item.authorUid);
+    return followingStoreIds.has(item.storeId || '');
+  });
+
   return (
     <div className="space-y-5 pb-20">
+      {/* Tab bar */}
       <div className="flex p-1 glass-card rounded-2xl">
-        {(['all', ...(onViewStore ? ['hot'] : [])] as const).map(tab => (
+        {(['discovery', 'following'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveSubTab(tab)}
@@ -5143,143 +5182,180 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile, us
               activeSubTab === tab ? "bg-brand-navy text-white shadow-lg" : "text-brand-navy/40"
             )}
           >
-            {tab === 'all' ? <Zap size={13} /> : <Flame size={13} />}
-            {tab === 'all' ? 'All' : 'Hot'}
+            {tab === 'discovery' ? <Compass size={13} /> : <Users size={13} />}
+            {tab === 'discovery' ? 'Discovery' : 'Following'}
           </button>
         ))}
       </div>
 
-      {activeSubTab === 'hot' ? (
-        <div className="grid grid-cols-2 gap-3">
-          {hotStores.map(store => {
-            const joined = userCards.some(c => c.store_id === store.id && !c.isArchived);
-            const isJoining = joiningStoreId === store.id;
-            const bg = store.theme || '#1e3a5f';
-            return (
-              <motion.div
-                key={store.id}
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="relative rounded-[1.75rem] overflow-hidden aspect-square flex flex-col cursor-pointer active:scale-[0.97] transition-transform"
-                style={{ background: `linear-gradient(145deg, ${bg}ee, ${bg}99)` }}
-                onClick={() => onViewStore && onViewStore(store)}
-              >
-                {/* Cover blurred background */}
-                {store.coverUrl && (
-                  <div className="absolute inset-0">
-                    <img src={store.coverUrl} alt="" className="w-full h-full object-cover opacity-20" />
-                  </div>
-                )}
-                <div className="relative z-10 flex flex-col h-full p-4">
-                  {/* Logo + verified */}
-                  <div className="flex items-start justify-between mb-auto">
-                    <div className="w-11 h-11 rounded-2xl overflow-hidden border-2 border-white/30 shadow-lg bg-white/10">
-                      {store.logoUrl
-                        ? <img src={store.logoUrl} alt="" className="w-full h-full object-cover" />
-                        : <div className="w-full h-full flex items-center justify-center"><Building2 size={18} className="text-white/70" /></div>}
-                    </div>
-                    {store.isVerified && (
-                      <div className="w-6 h-6 bg-brand-gold rounded-full flex items-center justify-center shadow">
-                        <Sparkles size={11} className="text-brand-navy" />
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Reward headline + store name */}
-                  <div className="mt-2">
-                    {store.reward
-                      ? <p className="font-extrabold text-white text-base leading-tight line-clamp-2">{store.reward}</p>
-                      : <p className="font-extrabold text-white text-base leading-tight line-clamp-2">{store.stamps_required_for_reward} stamps to reward</p>
-                    }
-                    <p className="text-white/50 text-[10px] font-medium mt-1 line-clamp-1">{store.name}</p>
-                  </div>
-
-                  {/* Join button */}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); if (!joined) handleJoinStore(store); else onViewStore && onViewStore(store); }}
-                    disabled={isJoining}
-                    className={cn(
-                      "mt-3 w-full py-2 rounded-xl text-[11px] font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5",
-                      joined
-                        ? "bg-white/20 text-white/80"
-                        : "bg-white text-brand-navy shadow-lg"
-                    )}
-                  >
-                    {isJoining
-                      ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={12} /></motion.div>
-                      : joined ? <><UserCheck size={12} /> Joined</> : <><Plus size={12} /> Join</>}
-                  </button>
-                </div>
-              </motion.div>
-            );
-          })}
-          {hotStores.length === 0 && (
-            <div className="col-span-2 py-20 text-center text-brand-navy/20">
-              <Building2 size={48} className="mx-auto mb-4 opacity-20" />
-              <p className="font-bold text-sm">No businesses yet</p>
-            </div>
-          )}
-        </div>
-      ) : loading ? (
-        <div className="flex justify-center py-12">
-          <motion.div animate={{ rotate: 360 }} transition={{ duration: 2, repeat: Infinity, ease: "linear" }}>
-            <Sparkles className="w-8 h-8 text-brand-gold" />
-          </motion.div>
-        </div>
+      {activeSubTab === 'following' ? (
+        loading ? <FeedLoadingSpinner /> : (
+          <div className="space-y-4">
+            {followingFeed.map((item) =>
+              !item._type
+                ? <FeedPostCard key={`gp-${item.id}`} post={item as GlobalPost} currentUser={currentUser} currentProfile={currentProfile} onViewUser={onViewUser} onViewStore={onViewStore} onLike={handleLike} onVote={handleVote} onDelete={async (p) => { await deleteDoc(doc(db, 'global_posts', p.id)); }} />
+                : <FeedVendorPostCard key={`vp-${item.id}`} item={item} />
+            )}
+            {followingFeed.length === 0 && (
+              <div className="py-20 text-center text-brand-navy/20">
+                <Compass size={64} className="mx-auto mb-4 opacity-10" />
+                <p className="font-bold">No posts from people you follow</p>
+                <p className="text-sm">Follow people to see their posts here</p>
+              </div>
+            )}
+          </div>
+        )
       ) : (
-        <div className="space-y-4">
-          {displayFeed.map((item) => {
-            const isGlobal = !item._type;
-            if (isGlobal) {
-              return (
-                <FeedPostCard
-                  key={`gp-${item.id}`}
-                  post={item as GlobalPost}
-                  currentUser={currentUser}
-                  currentProfile={currentProfile}
-                  onViewUser={onViewUser}
-                  onViewStore={onViewStore}
-                  onLike={handleLike}
-                  onVote={handleVote}
-                  onDelete={async (p) => { await deleteDoc(doc(db, 'global_posts', p.id)); }}
-                />
-              );
-            } else {
-              return (
-                <motion.div key={`vp-${item.id}`} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-5 rounded-[2rem] space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full overflow-hidden border border-brand-navy/5 shrink-0">
-                      <img src={item.authorPhoto || `https://picsum.photos/seed/${item.authorUid}/40`} alt="" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="font-bold text-sm truncate">{item.authorName}</p>
-                        <span className="px-2 py-0.5 bg-brand-gold/10 rounded-full text-[9px] font-bold text-brand-gold uppercase shrink-0">Store</span>
+        <>
+          {/* Hot Deals slider */}
+          {hotStores.length > 0 && (
+            <div>
+              <div className="flex items-center gap-1.5 mb-3 px-1">
+                <Flame size={15} className="text-orange-500" />
+                <h3 className="font-extrabold text-brand-navy text-sm">Hot Deals</h3>
+              </div>
+              <div className="flex gap-3 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {hotStores.slice(0, 6).map((store, i) => {
+                  const dealColor = DEAL_COLORS[i % DEAL_COLORS.length];
+                  return (
+                    <motion.div
+                      key={store.id}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: i * 0.05 }}
+                      className="shrink-0 w-36 rounded-[1.5rem] overflow-hidden cursor-pointer active:scale-[0.97] transition-transform flex flex-col relative"
+                      style={{ background: `linear-gradient(145deg, ${dealColor}ee, ${dealColor}88)`, height: '160px' }}
+                      onClick={() => onViewStore && onViewStore(store)}
+                    >
+                      {store.coverUrl && (
+                        <div className="absolute inset-0">
+                          <img src={store.coverUrl} alt="" className="w-full h-full object-cover opacity-15" />
+                        </div>
+                      )}
+                      <div className="relative z-10 flex flex-col h-full p-3">
+                        <div className="w-9 h-9 rounded-xl overflow-hidden border-2 border-white/40 shadow-md bg-white/20 mb-2 shrink-0">
+                          {store.logoUrl
+                            ? <img src={store.logoUrl} alt="" className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center"><Building2 size={14} className="text-white/70" /></div>}
+                        </div>
+                        <p className="font-extrabold text-white text-xs leading-tight line-clamp-2 mb-1">
+                          {store.reward || `${store.stamps_required_for_reward} stamps`}
+                        </p>
+                        <p className="text-white/60 text-[9px] font-medium mt-auto line-clamp-1">{store.name}</p>
                       </div>
-                      <p className="text-[10px] text-brand-navy/40">{item.createdAt ? format(item.createdAt.toDate(), 'MMM d, h:mm a') : 'Just now'}</p>
+                    </motion.div>
+                  );
+                })}
+                <button
+                  onClick={() => setShowAllDeals(true)}
+                  className="shrink-0 w-24 rounded-[1.5rem] flex flex-col items-center justify-center gap-2 border-2 border-dashed border-brand-navy/20 text-brand-navy/40 hover:text-brand-navy/60 hover:border-brand-navy/40 transition-all active:scale-95"
+                  style={{ height: '160px' }}
+                >
+                  <ChevronRight size={20} />
+                  <span className="text-[10px] font-bold text-center leading-tight">See<br />More</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Main mixed feed */}
+          {loading ? <FeedLoadingSpinner /> : (
+            <div className="space-y-4">
+              {displayFeed.map((item) =>
+                !item._type
+                  ? <FeedPostCard key={`gp-${item.id}`} post={item as GlobalPost} currentUser={currentUser} currentProfile={currentProfile} onViewUser={onViewUser} onViewStore={onViewStore} onLike={handleLike} onVote={handleVote} onDelete={async (p) => { await deleteDoc(doc(db, 'global_posts', p.id)); }} />
+                  : <FeedVendorPostCard key={`vp-${item.id}`} item={item} />
+              )}
+              {displayFeed.length === 0 && (
+                <div className="py-20 text-center text-brand-navy/20">
+                  <Compass size={64} className="mx-auto mb-4 opacity-10" />
+                  <p className="font-bold">Nothing posted yet</p>
+                  <p className="text-sm">Be the first to post!</p>
+                </div>
+              )}
+              <div ref={sentinelRef} className="h-4" />
+              {loadingMore && (
+                <div className="flex justify-center py-4">
+                  <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}>
+                    <Sparkles className="w-5 h-5 text-brand-gold/50" />
+                  </motion.div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* All Deals modal */}
+      {showAllDeals && (
+        <div className="fixed inset-0 z-[100] flex flex-col" style={{ background: 'rgba(0,0,0,0.7)' }}>
+          <div className="flex-1 overflow-y-auto bg-[#f8f9fc] rounded-t-3xl mt-12">
+            <div className="sticky top-0 bg-[#f8f9fc] z-10 px-5 pt-5 pb-3 flex items-center justify-between border-b border-brand-navy/5">
+              <div>
+                <h2 className="font-extrabold text-brand-navy text-lg">All Deals Near You</h2>
+                <p className="text-brand-navy/40 text-xs mt-0.5">{hotStores.length} businesses in your area</p>
+              </div>
+              <button onClick={() => setShowAllDeals(false)} className="w-9 h-9 rounded-full bg-brand-navy/10 flex items-center justify-center active:scale-95 transition-transform">
+                <X size={16} className="text-brand-navy" />
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3 p-4 pb-10">
+              {hotStores.map((store, i) => {
+                const dealColor = DEAL_COLORS[i % DEAL_COLORS.length];
+                const joined = userCards.some(c => c.store_id === store.id && !c.isArchived);
+                const isJoining = joiningStoreId === store.id;
+                return (
+                  <motion.div
+                    key={store.id}
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: i * 0.04 }}
+                    className="relative rounded-[1.75rem] overflow-hidden aspect-square flex flex-col cursor-pointer active:scale-[0.97] transition-transform"
+                    style={{ background: `linear-gradient(145deg, ${dealColor}ee, ${dealColor}88)` }}
+                    onClick={() => { onViewStore && onViewStore(store); setShowAllDeals(false); }}
+                  >
+                    {store.coverUrl && (
+                      <div className="absolute inset-0">
+                        <img src={store.coverUrl} alt="" className="w-full h-full object-cover opacity-20" />
+                      </div>
+                    )}
+                    <div className="relative z-10 flex flex-col h-full p-4">
+                      <div className="flex items-start justify-between mb-auto">
+                        <div className="w-11 h-11 rounded-2xl overflow-hidden border-2 border-white/40 shadow-lg bg-white/20">
+                          {store.logoUrl
+                            ? <img src={store.logoUrl} alt="" className="w-full h-full object-cover" />
+                            : <div className="w-full h-full flex items-center justify-center"><Building2 size={18} className="text-white/70" /></div>}
+                        </div>
+                        {store.isVerified && (
+                          <div className="w-6 h-6 bg-white/30 rounded-full flex items-center justify-center shadow">
+                            <Sparkles size={11} className="text-white" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="mt-2">
+                        <p className="font-extrabold text-white text-sm leading-tight line-clamp-2">
+                          {store.reward || `${store.stamps_required_for_reward} stamps to reward`}
+                        </p>
+                        <p className="text-white/60 text-[10px] font-medium mt-1 line-clamp-1">{store.name}</p>
+                      </div>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); if (!joined) handleJoinStore(store); else { onViewStore && onViewStore(store); setShowAllDeals(false); } }}
+                        disabled={isJoining}
+                        className={cn(
+                          "mt-3 w-full py-2 rounded-xl text-[11px] font-bold transition-all active:scale-95 flex items-center justify-center gap-1.5",
+                          joined ? "bg-white/20 text-white/80" : "bg-white text-brand-navy shadow-lg"
+                        )}
+                      >
+                        {isJoining
+                          ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={12} /></motion.div>
+                          : joined ? <><UserCheck size={12} /> Joined</> : <><Plus size={12} /> Join</>}
+                      </button>
                     </div>
-                  </div>
-                  <p className="text-sm text-brand-navy/90 leading-relaxed">{item.content}</p>
-                </motion.div>
-              );
-            }
-          })}
-          {displayFeed.length === 0 && (
-            <div className="py-20 text-center text-brand-navy/20">
-              <Compass size={64} className="mx-auto mb-4 opacity-10" />
-              <p className="font-bold">{activeSubTab === 'following' ? 'No posts from people you follow' : 'Nothing posted yet'}</p>
-              <p className="text-sm">{activeSubTab === 'following' ? 'Follow people to see their posts here' : 'Be the first to post!'}</p>
+                  </motion.div>
+                );
+              })}
             </div>
-          )}
-          {/* Infinite scroll sentinel */}
-          <div ref={sentinelRef} className="h-4" />
-          {loadingMore && (
-            <div className="flex justify-center py-4">
-              <motion.div animate={{ rotate: 360 }} transition={{ duration: 1.5, repeat: Infinity, ease: "linear" }}>
-                <Sparkles className="w-5 h-5 text-brand-gold/50" />
-              </motion.div>
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>
