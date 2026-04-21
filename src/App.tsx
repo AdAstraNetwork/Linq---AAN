@@ -5633,22 +5633,31 @@ function ForYouScreen({ onViewUser, onViewStore, currentUser, currentProfile, us
   useEffect(() => {
     const userLoc = currentProfile?.location as { lat: number; lng: number } | undefined;
     if (!userLoc?.lat) { setHotStores(allStores); return; }
+
+    // Sort stores so nearby ones appear first; always include all stores so the
+    // slider is never empty just because nothing is within the proximity radius.
     let cancelled = false;
     (async () => {
-      const results: StoreProfile[] = [];
+      const nearby: StoreProfile[] = [];
+      const rest: StoreProfile[] = [];
       for (const store of allStores) {
+        let coords: { lat: number; lng: number } | null = null;
         if (store.lat && store.lng) {
-          if (haversineKm(userLoc.lat, userLoc.lng, store.lat, store.lng) <= 15) results.push(store);
-          continue;
+          coords = { lat: store.lat, lng: store.lng };
+        } else {
+          const addr = store.address || store.location;
+          if (addr) coords = await geocodeAddress(addr);
+          if (allStores.indexOf(store) < allStores.length - 1) {
+            await new Promise(r => setTimeout(r, 1100)); // Nominatim rate limit: 1 req/s
+          }
         }
-        const addr = store.address || store.location;
-        if (!addr) { results.push(store); continue; }
-        const coords = await geocodeAddress(addr);
-        if (!coords) { results.push(store); continue; }
-        if (haversineKm(userLoc.lat, userLoc.lng, coords.lat, coords.lng) <= 15) results.push(store);
-        await new Promise(r => setTimeout(r, 1100)); // Nominatim rate limit: 1 req/s
+        if (coords && haversineKm(userLoc.lat, userLoc.lng, coords.lat, coords.lng) <= 15) {
+          nearby.push(store);
+        } else {
+          rest.push(store);
+        }
       }
-      if (!cancelled) setHotStores(results);
+      if (!cancelled) setHotStores([...nearby, ...rest]);
     })();
     return () => { cancelled = true; };
   }, [allStores, currentProfile?.location]);
