@@ -6812,46 +6812,6 @@ function StoreProfileView({ store, onBack, user, profile, onViewUser, onMessage 
         )
       )}
 
-      {showStats && (
-        <div className="grid grid-cols-2 gap-3">
-          {(vis?.members !== false) && (
-            <div className="glass-card p-4 rounded-[2rem]">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Users size={13} className="text-brand-gold" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Members</span>
-              </div>
-              <p className="text-2xl font-bold">{totalMembers}</p>
-            </div>
-          )}
-          {(vis?.stamps !== false) && (
-            <div className="glass-card p-4 rounded-[2rem]">
-              <div className="flex items-center gap-1.5 mb-1">
-                <CheckCircle2 size={13} className="text-brand-gold" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Stamps</span>
-              </div>
-              <p className="text-2xl font-bold">{totalStampsGiven}</p>
-            </div>
-          )}
-          {(vis?.activeCards !== false) && (
-            <div className="glass-card p-4 rounded-[2rem]">
-              <div className="flex items-center gap-1.5 mb-1">
-                <Wallet size={13} className="text-brand-gold" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Active Cards</span>
-              </div>
-              <p className="text-2xl font-bold">{activeCards}</p>
-            </div>
-          )}
-          {(vis?.returnRate !== false) && (
-            <div className="glass-card p-4 rounded-[2rem]">
-              <div className="flex items-center gap-1.5 mb-1">
-                <TrendingUp size={13} className="text-brand-gold" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-brand-navy/40">Return Rate</span>
-              </div>
-              <p className="text-2xl font-bold">{returnRate}<span className="text-base">%</span></p>
-            </div>
-          )}
-        </div>
-      )}
 
       <div className="glass-card p-6 rounded-[2.5rem]">
         <h3 className="font-bold mb-2">About</h3>
