@@ -83,7 +83,10 @@ import {
   Building2,
   Edit3,
   Save,
-  CreditCard
+  CreditCard,
+  Phone,
+  Hash,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
@@ -145,6 +148,23 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
 
 type UserRole = 'consumer' | 'vendor';
 type Category = 'Food' | 'Beauty' | 'Barber' | 'Gym' | 'Parking' | 'Retail';
+
+interface ConsumerOnboardingData {
+  type: 'consumer';
+  gender: string;
+  birthday: string;
+  location: { lat: number; lng: number; city?: string } | null;
+}
+
+interface VendorOnboardingData {
+  type: 'vendor';
+  businessName: string;
+  category: string;
+  address: string;
+  phone: string;
+  description: string;
+  location: { lat: number; lng: number; city?: string } | null;
+}
 
 interface UserProfile {
   uid: string;
@@ -293,6 +313,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [needsRoleSelection, setNeedsRoleSelection] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [selectedRole, setSelectedRole] = useState<'consumer' | 'vendor' | null>(null);
   const [activeTab, setActiveTab] = useState<string>('for-you');
   const [viewingStore, setViewingStore] = useState<StoreProfile | null>(null);
   const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
@@ -581,11 +602,15 @@ export default function App() {
           setNeedsRoleSelection(true);
         } else {
           const data = userDoc.data();
-          setNeedsOnboarding(data.roleConfirmed === true && !data.onboardingComplete);
+          if (data.roleConfirmed === true && !data.onboardingComplete) {
+            setSelectedRole(data.role as 'consumer' | 'vendor');
+            setNeedsOnboarding(true);
+          }
         }
       } else {
         setNeedsRoleSelection(false);
         setNeedsOnboarding(false);
+        setSelectedRole(null);
       }
       setLoading(false);
     });
@@ -679,18 +704,34 @@ export default function App() {
         totalRedeemed: 0
       });
     }
+    setSelectedRole(role);
     setNeedsRoleSelection(false);
     setNeedsOnboarding(true);
   };
 
-  const handleOnboardingComplete = async (data: { gender: string; birthday: string; location: { lat: number; lng: number; city?: string } | null }) => {
+  const handleOnboardingComplete = async (data: ConsumerOnboardingData | VendorOnboardingData) => {
     if (!user) return;
-    await updateDoc(doc(db, 'users', user.uid), {
-      ...(data.gender ? { gender: data.gender } : {}),
-      ...(data.birthday ? { birthday: data.birthday } : {}),
-      ...(data.location ? { location: data.location } : {}),
-      onboardingComplete: true
-    });
+    if (data.type === 'consumer') {
+      await updateDoc(doc(db, 'users', user.uid), {
+        ...(data.gender ? { gender: data.gender } : {}),
+        ...(data.birthday ? { birthday: data.birthday } : {}),
+        ...(data.location ? { location: data.location } : {}),
+        onboardingComplete: true
+      });
+    } else {
+      await addDoc(collection(db, 'stores'), {
+        name: data.businessName,
+        category: data.category,
+        address: data.address,
+        phone: data.phone,
+        description: data.description,
+        ownerUid: user.uid,
+        isVerified: false,
+        stamps_required_for_reward: 10,
+        ...(data.location ? { lat: data.location.lat, lng: data.location.lng, location: data.location.city ?? '' } : {}),
+      });
+      await updateDoc(doc(db, 'users', user.uid), { onboardingComplete: true });
+    }
     setNeedsOnboarding(false);
   };
 
@@ -716,7 +757,7 @@ export default function App() {
   }
 
   if (needsOnboarding) {
-    return <OnboardingScreen user={user} onComplete={handleOnboardingComplete} />;
+    return <OnboardingScreen user={user} role={selectedRole ?? 'consumer'} onComplete={handleOnboardingComplete} />;
   }
 
   return (
@@ -969,23 +1010,86 @@ function RoleSelectionScreen({ user, onSelect }: { user: FirebaseUser, onSelect:
         </button>
       </div>
 
-      <p className="text-xs text-brand-navy/30 mt-8">You can update this later in your profile settings</p>
+      <p className="text-xs text-brand-navy/30 mt-8">This cannot be changed after sign up</p>
     </div>
   );
 }
 
-function OnboardingScreen({ user, onComplete }: { user: FirebaseUser, onComplete: (data: { gender: string; birthday: string; location: { lat: number; lng: number; city?: string } | null }) => Promise<void> }) {
-  const STEPS = ['gender', 'birthday', 'location'] as const;
+function LocationStep({ locationData, locationStatus, onRequest }: {
+  locationData: { lat: number; lng: number; city?: string } | null;
+  locationStatus: 'idle' | 'requesting' | 'granted' | 'denied';
+  onRequest: () => void;
+}) {
+  return (
+    <div className="w-full">
+      {locationStatus === 'idle' && (
+        <button
+          onClick={onRequest}
+          className="w-full py-4 px-5 rounded-2xl bg-brand-navy text-white font-bold flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-lg shadow-brand-navy/20"
+        >
+          <MapPin size={18} />
+          Allow Location Access
+        </button>
+      )}
+      {locationStatus === 'requesting' && (
+        <div className="flex items-center justify-center gap-3 py-4 text-brand-navy/50">
+          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
+            <Sparkles size={18} className="text-brand-gold" />
+          </motion.div>
+          <span className="font-medium text-sm">Requesting access…</span>
+        </div>
+      )}
+      {locationStatus === 'granted' && (
+        <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-5 flex items-center gap-4">
+          <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center shrink-0">
+            <MapPin size={18} className="text-green-600" />
+          </div>
+          <div className="text-left">
+            <p className="font-bold text-green-700 text-sm">Location allowed</p>
+            {locationData?.city && <p className="text-xs text-green-600/70 mt-0.5">{locationData.city}</p>}
+          </div>
+        </div>
+      )}
+      {locationStatus === 'denied' && (
+        <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 text-center">
+          <p className="font-bold text-amber-700 text-sm">Location access denied</p>
+          <p className="text-xs text-amber-600/70 mt-1">You can enable it later in your device settings</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function OnboardingScreen({ user, role, onComplete }: {
+  user: FirebaseUser;
+  role: 'consumer' | 'vendor';
+  onComplete: (data: ConsumerOnboardingData | VendorOnboardingData) => Promise<void>;
+}) {
+  const isVendor = role === 'vendor';
+  const STEPS = isVendor
+    ? ['name', 'category', 'contact', 'location'] as const
+    : ['gender', 'birthday', 'location'] as const;
+
   const [step, setStep] = React.useState(0);
-  const [gender, setGender] = React.useState('');
-  const [birthday, setBirthday] = React.useState('');
-  const [locationData, setLocationData] = React.useState<{ lat: number; lng: number; city?: string } | null>(null);
-  const [locationStatus, setLocationStatus] = React.useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
   const [saving, setSaving] = React.useState(false);
 
-  const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+  // Consumer fields
+  const [gender, setGender] = React.useState('');
+  const [birthday, setBirthday] = React.useState('');
 
-  const canAdvance = step === 0 ? !!gender : step === 1 ? !!birthday : locationStatus === 'granted' || locationStatus === 'denied';
+  // Vendor fields
+  const [businessName, setBusinessName] = React.useState('');
+  const [category, setCategory] = React.useState('');
+  const [address, setAddress] = React.useState('');
+  const [phone, setPhone] = React.useState('');
+  const [description, setDescription] = React.useState('');
+
+  // Shared
+  const [locationData, setLocationData] = React.useState<{ lat: number; lng: number; city?: string } | null>(null);
+  const [locationStatus, setLocationStatus] = React.useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
+
+  const GENDERS = ['Male', 'Female', 'Non-binary', 'Prefer not to say'];
+  const CATEGORIES: Category[] = ['Food', 'Beauty', 'Barber', 'Gym', 'Parking', 'Retail'];
 
   const requestLocation = () => {
     setLocationStatus('requesting');
@@ -1006,12 +1110,25 @@ function OnboardingScreen({ user, onComplete }: { user: FirebaseUser, onComplete
     );
   };
 
+  const canAdvance = isVendor
+    ? step === 0 ? businessName.trim().length > 0
+    : step === 1 ? !!category
+    : step === 2 ? address.trim().length > 0 && phone.trim().length > 0
+    : locationStatus === 'granted' || locationStatus === 'denied'
+    : step === 0 ? !!gender
+    : step === 1 ? !!birthday
+    : locationStatus === 'granted' || locationStatus === 'denied';
+
   const handleFinish = async () => {
     setSaving(true);
-    await onComplete({ gender, birthday, location: locationData });
+    if (isVendor) {
+      await onComplete({ type: 'vendor', businessName, category, address, phone, description, location: locationData });
+    } else {
+      await onComplete({ type: 'consumer', gender, birthday, location: locationData });
+    }
   };
 
-  const stepContent = [
+  const consumerSteps = [
     // Step 0 — Gender
     <>
       <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1025,9 +1142,7 @@ function OnboardingScreen({ user, onComplete }: { user: FirebaseUser, onComplete
             key={g}
             onClick={() => setGender(g)}
             className={`w-full py-4 px-5 rounded-2xl font-bold text-sm flex items-center justify-between transition-all active:scale-[0.98] ${
-              gender === g
-                ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20'
-                : 'bg-white border-2 border-brand-navy/10 text-brand-navy hover:border-brand-gold/40'
+              gender === g ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20' : 'bg-white border-2 border-brand-navy/10 text-brand-navy hover:border-brand-gold/40'
             }`}
           >
             {g}
@@ -1036,7 +1151,6 @@ function OnboardingScreen({ user, onComplete }: { user: FirebaseUser, onComplete
         ))}
       </div>
     </>,
-
     // Step 1 — Birthday
     <>
       <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1054,7 +1168,6 @@ function OnboardingScreen({ user, onComplete }: { user: FirebaseUser, onComplete
         />
       </div>
     </>,
-
     // Step 2 — Location
     <>
       <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -1062,50 +1175,102 @@ function OnboardingScreen({ user, onComplete }: { user: FirebaseUser, onComplete
       </div>
       <h2 className="font-display font-bold text-2xl text-brand-navy mb-1">Find nearby deals</h2>
       <p className="text-sm text-brand-navy/40 mb-8">Allow location access to discover businesses around you</p>
-      <div className="w-full">
-        {locationStatus === 'idle' && (
-          <button
-            onClick={requestLocation}
-            className="w-full py-4 px-5 rounded-2xl bg-brand-navy text-white font-bold flex items-center justify-center gap-3 active:scale-[0.98] transition-all shadow-lg shadow-brand-navy/20"
-          >
-            <MapPin size={18} />
-            Allow Location Access
-          </button>
-        )}
-        {locationStatus === 'requesting' && (
-          <div className="flex items-center justify-center gap-3 py-4 text-brand-navy/50">
-            <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}>
-              <Sparkles size={18} className="text-brand-gold" />
-            </motion.div>
-            <span className="font-medium text-sm">Requesting access…</span>
-          </div>
-        )}
-        {locationStatus === 'granted' && (
-          <div className="bg-green-50 border-2 border-green-200 rounded-2xl p-5 flex items-center gap-4">
-            <div className="w-10 h-10 bg-green-100 rounded-xl flex items-center justify-center shrink-0">
-              <MapPin size={18} className="text-green-600" />
-            </div>
-            <div className="text-left">
-              <p className="font-bold text-green-700 text-sm">Location allowed</p>
-              {locationData?.city && <p className="text-xs text-green-600/70 mt-0.5">{locationData.city}</p>}
-            </div>
-          </div>
-        )}
-        {locationStatus === 'denied' && (
-          <div className="space-y-3">
-            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-5 text-center">
-              <p className="font-bold text-amber-700 text-sm">Location access denied</p>
-              <p className="text-xs text-amber-600/70 mt-1">You can enable it later in your device settings</p>
-            </div>
-          </div>
-        )}
-      </div>
+      <LocationStep locationData={locationData} locationStatus={locationStatus} onRequest={requestLocation} />
     </>
   ];
 
+  const vendorSteps = [
+    // Step 0 — Business Name
+    <>
+      <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
+        <Building2 className="w-7 h-7 text-brand-gold" />
+      </div>
+      <h2 className="font-display font-bold text-2xl text-brand-navy mb-1">Your business name</h2>
+      <p className="text-sm text-brand-navy/40 mb-8">This is how customers will find you on Linq</p>
+      <div className="w-full space-y-3">
+        <input
+          type="text"
+          value={businessName}
+          onChange={e => setBusinessName(e.target.value)}
+          placeholder="e.g. The Coffee House"
+          className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-brand-navy/10 text-brand-navy font-bold text-base focus:outline-none focus:border-brand-gold/60 placeholder:font-normal placeholder:text-brand-navy/30"
+        />
+        <textarea
+          value={description}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Short description of your business (optional)"
+          rows={3}
+          className="w-full px-5 py-4 rounded-2xl bg-white border-2 border-brand-navy/10 text-brand-navy text-sm focus:outline-none focus:border-brand-gold/60 placeholder:text-brand-navy/30 resize-none"
+        />
+      </div>
+    </>,
+    // Step 1 — Category
+    <>
+      <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
+        <Hash className="w-7 h-7 text-brand-gold" />
+      </div>
+      <h2 className="font-display font-bold text-2xl text-brand-navy mb-1">Business category</h2>
+      <p className="text-sm text-brand-navy/40 mb-8">Help customers find you in the right section</p>
+      <div className="w-full grid grid-cols-2 gap-3">
+        {CATEGORIES.map(cat => (
+          <button
+            key={cat}
+            onClick={() => setCategory(cat)}
+            className={`py-4 px-4 rounded-2xl font-bold text-sm flex items-center justify-between transition-all active:scale-[0.98] ${
+              category === cat ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20' : 'bg-white border-2 border-brand-navy/10 text-brand-navy hover:border-brand-gold/40'
+            }`}
+          >
+            {cat}
+            {category === cat && <Sparkles size={14} className="text-brand-gold" />}
+          </button>
+        ))}
+      </div>
+    </>,
+    // Step 2 — Contact & Address
+    <>
+      <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
+        <Phone className="w-7 h-7 text-brand-gold" />
+      </div>
+      <h2 className="font-display font-bold text-2xl text-brand-navy mb-1">Contact details</h2>
+      <p className="text-sm text-brand-navy/40 mb-8">Your address and phone number for customers</p>
+      <div className="w-full space-y-3">
+        <div className="relative">
+          <MapPin size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-navy/30" />
+          <input
+            type="text"
+            value={address}
+            onChange={e => setAddress(e.target.value)}
+            placeholder="Business address"
+            className="w-full pl-10 pr-5 py-4 rounded-2xl bg-white border-2 border-brand-navy/10 text-brand-navy text-sm focus:outline-none focus:border-brand-gold/60 placeholder:text-brand-navy/30"
+          />
+        </div>
+        <div className="relative">
+          <Phone size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-navy/30" />
+          <input
+            type="tel"
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="Phone number"
+            className="w-full pl-10 pr-5 py-4 rounded-2xl bg-white border-2 border-brand-navy/10 text-brand-navy text-sm focus:outline-none focus:border-brand-gold/60 placeholder:text-brand-navy/30"
+          />
+        </div>
+      </div>
+    </>,
+    // Step 3 — Location (GPS)
+    <>
+      <div className="w-14 h-14 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-4">
+        <MapPin className="w-7 h-7 text-brand-gold" />
+      </div>
+      <h2 className="font-display font-bold text-2xl text-brand-navy mb-1">Pin your location</h2>
+      <p className="text-sm text-brand-navy/40 mb-8">Allow location access so customers nearby can discover you</p>
+      <LocationStep locationData={locationData} locationStatus={locationStatus} onRequest={requestLocation} />
+    </>
+  ];
+
+  const stepContent = isVendor ? vendorSteps : consumerSteps;
+
   return (
     <div className="min-h-screen flex flex-col bg-brand-bg px-8">
-      {/* Progress dots */}
       <div className="flex items-center justify-center gap-2 pt-14 mb-10">
         {STEPS.map((_, i) => (
           <div
@@ -1141,9 +1306,9 @@ function OnboardingScreen({ user, onComplete }: { user: FirebaseUser, onComplete
         >
           {saving
             ? <><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={16} /></motion.div> Setting up…</>
-            : step < STEPS.length - 1 ? 'Continue' : 'Get Started'}
+            : step < STEPS.length - 1 ? 'Continue' : isVendor ? 'Launch My Business' : 'Get Started'}
         </button>
-        {step < STEPS.length - 1 && (
+        {step < STEPS.length - 1 && !isVendor && (
           <button onClick={() => setStep(s => s + 1)} className="w-full py-3 text-xs text-brand-navy/30 hover:text-brand-navy/50 transition-colors">
             Skip for now
           </button>
@@ -3658,22 +3823,6 @@ function ProfileSettingsModal({ profile, user, onClose, onLogout, onDeleteAccoun
 
         {/* Account Actions */}
         <div className="pt-4 border-t border-brand-navy/10 space-y-3">
-          <button
-            onClick={async () => {
-              const newRole = profile.role === 'consumer' ? 'vendor' : 'consumer';
-              await updateDoc(doc(db, 'users', profile.uid), { role: newRole });
-              window.location.reload();
-            }}
-            className={`w-full py-4 px-5 rounded-2xl font-bold text-sm flex items-center gap-3 transition-all active:scale-[0.98] ${
-              profile.role === 'consumer'
-                ? 'bg-brand-navy text-white'
-                : 'bg-brand-gold text-brand-navy'
-            }`}
-          >
-            <LayoutDashboard size={18} />
-            Switch to {profile.role === 'consumer' ? 'Vendor' : 'Consumer'} Account
-          </button>
-
           <button
             onClick={onLogout}
             className="w-full py-4 px-5 rounded-2xl text-red-500 font-bold text-sm flex items-center gap-3 hover:bg-red-50 transition-colors"
