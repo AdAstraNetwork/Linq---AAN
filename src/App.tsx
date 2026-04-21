@@ -629,6 +629,7 @@ export default function App() {
           const data = existingDoc.data();
           setSelectedRole(data.role as 'consumer' | 'vendor');
           setProfileCollection(inUsers ? 'users' : 'vendors');
+          setProfile(data as UserProfile);
           if (data.roleConfirmed === true && !data.onboardingComplete) {
             setNeedsOnboarding(true);
           }
@@ -639,6 +640,7 @@ export default function App() {
         setNeedsOnboarding(false);
         setSelectedRole(null);
         setProfileCollection(null);
+        setProfile(null);
       }
       setLoading(false);
     });
@@ -671,6 +673,7 @@ export default function App() {
           const data = existingDoc.data();
           setSelectedRole(data.role as 'consumer' | 'vendor');
           setProfileCollection(inUsers ? 'users' : 'vendors');
+          setProfile(data as UserProfile);
           if (data.roleConfirmed === true && !data.onboardingComplete) {
             setNeedsOnboarding(true);
           }
@@ -736,6 +739,7 @@ export default function App() {
         const data = existingDoc.data();
         setSelectedRole(data.role as 'consumer' | 'vendor');
         setProfileCollection(inUsers ? 'users' : 'vendors');
+        setProfile(data as UserProfile);
         if (data.roleConfirmed === true && !data.onboardingComplete) {
           setNeedsOnboarding(true);
         }
@@ -7181,11 +7185,15 @@ function PublicUserProfile({ targetUser: initialTargetUser, onBack, currentUser,
   const [targetFollowing, setTargetFollowing] = useState(0);
 
   useEffect(() => {
-    // Listen to target user profile for real-time stamp updates
-    const unsubProfile = onSnapshot(doc(db, 'users', initialTargetUser.uid), (doc) => {
-      if (doc.exists()) {
-        setTargetUser({ uid: doc.id, ...doc.data() } as UserProfile);
-      }
+    // Listen to target user profile for real-time updates — check users then vendors
+    let unsubProfile = () => {};
+    getDoc(doc(db, 'users', initialTargetUser.uid)).then(snap => {
+      const ref = snap.exists()
+        ? doc(db, 'users', initialTargetUser.uid)
+        : doc(db, 'vendors', initialTargetUser.uid);
+      unsubProfile = onSnapshot(ref, (d) => {
+        if (d.exists()) setTargetUser({ uid: d.id, ...d.data() } as UserProfile);
+      });
     });
 
     // Fetch all stores to match with cards
