@@ -757,10 +757,21 @@ export default function App() {
 
     const tryDelete = async (fn: () => Promise<void>) => { try { await fn(); } catch (e) { console.warn('Delete step skipped:', e); } };
 
+    // Global posts authored by user (+ their comments subcollections)
     await tryDelete(async () => {
       const snap = await getDocs(query(collection(db, 'global_posts'), where('authorUid', '==', uid)));
+      await Promise.all(snap.docs.map(async d => {
+        const comments = await getDocs(collection(db, 'global_posts', d.id, 'comments'));
+        await Promise.all(comments.docs.map(c => deleteDoc(c.ref)));
+        await deleteDoc(d.ref);
+      }));
+    });
+    // Wall posts made TO this user by others
+    await tryDelete(async () => {
+      const snap = await getDocs(query(collection(db, 'global_posts'), where('toUid', '==', uid)));
       await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
     });
+    // Follows (both directions)
     await tryDelete(async () => {
       const [a, b] = await Promise.all([
         getDocs(query(collection(db, 'follows'), where('followerUid', '==', uid))),
@@ -768,39 +779,86 @@ export default function App() {
       ]);
       await Promise.all([...a.docs, ...b.docs].map(d => deleteDoc(d.ref)));
     });
+    // Store follows by this user
     await tryDelete(async () => {
       const snap = await getDocs(query(collection(db, 'store_follows'), where('followerUid', '==', uid)));
       await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
     });
+    // User wall reviews written by or to this user (+ likes/replies subcollections)
     await tryDelete(async () => {
       const [a, b] = await Promise.all([
-        getDocs(query(collection(db, 'user_reviews'), where('authorUid', '==', uid))),
+        getDocs(query(collection(db, 'user_reviews'), where('fromUid', '==', uid))),
         getDocs(query(collection(db, 'user_reviews'), where('toUid', '==', uid))),
       ]);
-      await Promise.all([...a.docs, ...b.docs].map(d => deleteDoc(d.ref)));
+      const unique = [...new Map([...a.docs, ...b.docs].map(d => [d.id, d])).values()];
+      await Promise.all(unique.map(async d => {
+        const [likes, replies] = await Promise.all([
+          getDocs(collection(db, 'user_reviews', d.id, 'likes')),
+          getDocs(collection(db, 'user_reviews', d.id, 'replies')),
+        ]);
+        await Promise.all([...likes.docs, ...replies.docs].map(s => deleteDoc(s.ref)));
+        await deleteDoc(d.ref);
+      }));
     });
+    // Store reviews written by this user
+    await tryDelete(async () => {
+      const snap = await getDocs(query(collection(db, 'store_reviews'), where('authorUid', '==', uid)));
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+    });
+    // Loyalty cards held by this user
+    await tryDelete(async () => {
+      const snap = await getDocs(query(collection(db, 'cards'), where('user_id', '==', uid)));
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+    });
+    // Transaction history for this user
+    await tryDelete(async () => {
+      const snap = await getDocs(query(collection(db, 'transactions'), where('user_id', '==', uid)));
+      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+    });
+    // Stores owned by this user (+ all store sub-data)
     await tryDelete(async () => {
       const snap = await getDocs(query(collection(db, 'stores'), where('ownerUid', '==', uid)));
       await Promise.all(snap.docs.map(async (storeDoc) => {
-        const posts = await getDocs(collection(db, 'stores', storeDoc.id, 'posts'));
-        await Promise.all(posts.docs.map(d => deleteDoc(d.ref)));
+        const sid = storeDoc.id;
+        const [posts, storeReviews, storeFollows, storeCards, storeTxns] = await Promise.all([
+          getDocs(collection(db, 'stores', sid, 'posts')),
+          getDocs(query(collection(db, 'store_reviews'), where('storeId', '==', sid))),
+          getDocs(query(collection(db, 'store_follows'), where('storeId', '==', sid))),
+          getDocs(query(collection(db, 'cards'), where('store_id', '==', sid))),
+          getDocs(query(collection(db, 'transactions'), where('store_id', '==', sid))),
+        ]);
+        await Promise.all([
+          ...posts.docs, ...storeReviews.docs, ...storeFollows.docs,
+          ...storeCards.docs, ...storeTxns.docs,
+        ].map(d => deleteDoc(d.ref)));
         await deleteDoc(storeDoc.ref);
       }));
     });
+    // Chats this user is part of (+ messages subcollections)
     await tryDelete(async () => {
-      const snap = await getDocs(query(collection(db, 'notifications'), where('toUid', '==', uid)));
-      await Promise.all(snap.docs.map(d => deleteDoc(d.ref)));
+      const snap = await getDocs(query(collection(db, 'chats'), where('uids', 'array-contains', uid)));
+      await Promise.all(snap.docs.map(async chatDoc => {
+        const messages = await getDocs(collection(db, 'chats', chatDoc.id, 'messages'));
+        await Promise.all(messages.docs.map(d => deleteDoc(d.ref)));
+        await deleteDoc(chatDoc.ref);
+      }));
     });
+    // Notifications sent to or from this user
+    await tryDelete(async () => {
+      const [a, b] = await Promise.all([
+        getDocs(query(collection(db, 'notifications'), where('toUid', '==', uid))),
+        getDocs(query(collection(db, 'notifications'), where('fromUid', '==', uid))),
+      ]);
+      await Promise.all([...a.docs, ...b.docs].map(d => deleteDoc(d.ref)));
+    });
+    // Profile documents
     await tryDelete(() => deleteDoc(doc(db, 'users', uid)));
     await tryDelete(() => deleteDoc(doc(db, 'vendors', uid)));
 
     // Sign out first so the app navigates to the login screen immediately,
     // then attempt to delete the Firebase Auth record silently in the background.
     await signOut(auth);
-    user.delete().catch(() => {
-      // Silently ignore — if the session is stale the auth record is orphaned
-      // but all app data is already gone so it is harmless.
-    });
+    user.delete().catch(() => {});
   };
 
   const handleRoleSelect = async (role: 'consumer' | 'vendor') => {
