@@ -327,6 +327,7 @@ export default function App() {
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
   const [needsEmailVerification, setNeedsEmailVerification] = useState(false);
   const [selectedRole, setSelectedRole] = useState<'consumer' | 'vendor' | null>(null);
+  const [profileCollection, setProfileCollection] = useState<'users' | 'vendors' | null>(null);
   const [activeTab, setActiveTab] = useState<string>('for-you');
   const [viewingStore, setViewingStore] = useState<StoreProfile | null>(null);
   const [viewingUser, setViewingUser] = useState<UserProfile | null>(null);
@@ -426,14 +427,13 @@ export default function App() {
 
   // Listen to profile changes
   useEffect(() => {
-    if (!user || !selectedRole) return;
-    const collectionName = selectedRole === 'vendor' ? 'vendors' : 'users';
-    return onSnapshot(doc(db, collectionName, user.uid), (snap) => {
+    if (!user || !profileCollection) return;
+    return onSnapshot(doc(db, profileCollection, user.uid), (snap) => {
       if (snap.exists()) {
         setProfile(snap.data() as UserProfile);
       }
     }, (error) => console.error("Profile listener:", error));
-  }, [user, selectedRole]);
+  }, [user, profileCollection]);
   useEffect(() => {
     const seedDemoStores = async () => {
       try {
@@ -621,12 +621,14 @@ export default function App() {
         }
         setNeedsEmailVerification(false);
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
-        const existingDoc = userDoc.exists() ? userDoc : await getDoc(doc(db, 'vendors', firebaseUser.uid));
+        const inUsers = userDoc.exists();
+        const existingDoc = inUsers ? userDoc : await getDoc(doc(db, 'vendors', firebaseUser.uid));
         if (!existingDoc.exists()) {
           setNeedsRoleSelection(true);
         } else {
           const data = existingDoc.data();
           setSelectedRole(data.role as 'consumer' | 'vendor');
+          setProfileCollection(inUsers ? 'users' : 'vendors');
           if (data.roleConfirmed === true && !data.onboardingComplete) {
             setNeedsOnboarding(true);
           }
@@ -636,6 +638,7 @@ export default function App() {
         setNeedsRoleSelection(false);
         setNeedsOnboarding(false);
         setSelectedRole(null);
+        setProfileCollection(null);
       }
       setLoading(false);
     });
@@ -660,12 +663,14 @@ export default function App() {
         const refreshed = auth.currentUser;
         if (!refreshed) return;
         const userDoc = await getDoc(doc(db, 'users', refreshed.uid));
-        const existingDoc = userDoc.exists() ? userDoc : await getDoc(doc(db, 'vendors', refreshed.uid));
+        const inUsers = userDoc.exists();
+        const existingDoc = inUsers ? userDoc : await getDoc(doc(db, 'vendors', refreshed.uid));
         if (!existingDoc.exists()) {
           setNeedsRoleSelection(true);
         } else {
           const data = existingDoc.data();
           setSelectedRole(data.role as 'consumer' | 'vendor');
+          setProfileCollection(inUsers ? 'users' : 'vendors');
           if (data.roleConfirmed === true && !data.onboardingComplete) {
             setNeedsOnboarding(true);
           }
@@ -723,12 +728,14 @@ export default function App() {
     if (refreshed?.emailVerified) {
       setNeedsEmailVerification(false);
       const userDoc = await getDoc(doc(db, 'users', refreshed.uid));
-      const existingDoc = userDoc.exists() ? userDoc : await getDoc(doc(db, 'vendors', refreshed.uid));
+      const inUsers = userDoc.exists();
+      const existingDoc = inUsers ? userDoc : await getDoc(doc(db, 'vendors', refreshed.uid));
       if (!existingDoc.exists()) {
         setNeedsRoleSelection(true);
       } else {
         const data = existingDoc.data();
         setSelectedRole(data.role as 'consumer' | 'vendor');
+        setProfileCollection(inUsers ? 'users' : 'vendors');
         if (data.roleConfirmed === true && !data.onboardingComplete) {
           setNeedsOnboarding(true);
         }
@@ -813,6 +820,7 @@ export default function App() {
       });
     }
     setSelectedRole(role);
+    setProfileCollection(collectionName);
     setNeedsRoleSelection(false);
     setNeedsOnboarding(true);
   };
