@@ -11,6 +11,9 @@ import {
   reauthenticateWithPopup,
   GoogleAuthProvider,
   signOut,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendEmailVerification,
   User as FirebaseUser
 } from 'firebase/auth';
 import {
@@ -86,7 +89,12 @@ import {
   CreditCard,
   Phone,
   Hash,
-  FileText
+  FileText,
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  AlertCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
@@ -313,6 +321,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [needsRoleSelection, setNeedsRoleSelection] = useState(false);
   const [needsOnboarding, setNeedsOnboarding] = useState(false);
+  const [needsEmailVerification, setNeedsEmailVerification] = useState(false);
   const [selectedRole, setSelectedRole] = useState<'consumer' | 'vendor' | null>(null);
   const [activeTab, setActiveTab] = useState<string>('for-you');
   const [viewingStore, setViewingStore] = useState<StoreProfile | null>(null);
@@ -597,6 +606,15 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
+        const isEmailProvider = firebaseUser.providerData.some(p => p.providerId === 'password');
+        if (isEmailProvider && !firebaseUser.emailVerified) {
+          setNeedsEmailVerification(true);
+          setNeedsRoleSelection(false);
+          setNeedsOnboarding(false);
+          setLoading(false);
+          return;
+        }
+        setNeedsEmailVerification(false);
         const userDoc = await getDoc(doc(db, 'users', firebaseUser.uid));
         if (!userDoc.exists()) {
           setNeedsRoleSelection(true);
@@ -608,6 +626,7 @@ export default function App() {
           }
         }
       } else {
+        setNeedsEmailVerification(false);
         setNeedsRoleSelection(false);
         setNeedsOnboarding(false);
         setSelectedRole(null);
@@ -624,6 +643,56 @@ export default function App() {
     } catch (error) {
       console.error("Login failed", error);
     }
+  };
+
+  const handleEmailSignUp = async (email: string, password: string): Promise<string | null> => {
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, email, password);
+      await sendEmailVerification(credential.user);
+      setNeedsEmailVerification(true);
+      return null;
+    } catch (err: any) {
+      return err?.message ?? 'Sign up failed';
+    }
+  };
+
+  const handleEmailSignIn = async (email: string, password: string): Promise<string | null> => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      return null;
+    } catch (err: any) {
+      if (err?.code === 'auth/invalid-credential' || err?.code === 'auth/wrong-password' || err?.code === 'auth/user-not-found') {
+        return 'Incorrect email or password';
+      }
+      return err?.message ?? 'Sign in failed';
+    }
+  };
+
+  const handleResendVerification = async () => {
+    if (user && !user.emailVerified) {
+      await sendEmailVerification(user);
+    }
+  };
+
+  const handleCheckVerification = async (): Promise<boolean> => {
+    if (!user) return false;
+    await user.reload();
+    const refreshed = auth.currentUser;
+    if (refreshed?.emailVerified) {
+      setNeedsEmailVerification(false);
+      const userDoc = await getDoc(doc(db, 'users', refreshed.uid));
+      if (!userDoc.exists()) {
+        setNeedsRoleSelection(true);
+      } else {
+        const data = userDoc.data();
+        if (data.roleConfirmed === true && !data.onboardingComplete) {
+          setSelectedRole(data.role as 'consumer' | 'vendor');
+          setNeedsOnboarding(true);
+        }
+      }
+      return true;
+    }
+    return false;
   };
 
   const handleLogout = () => signOut(auth);
@@ -749,7 +818,11 @@ export default function App() {
   }
 
   if (!user) {
-    return <LandingPage onLogin={handleLogin} />;
+    return <LandingPage onLogin={handleLogin} onEmailSignUp={handleEmailSignUp} onEmailSignIn={handleEmailSignIn} />;
+  }
+
+  if (needsEmailVerification) {
+    return <EmailVerificationScreen user={user} onCheck={handleCheckVerification} onResend={handleResendVerification} onLogout={handleLogout} />;
   }
 
   if (needsRoleSelection) {
@@ -929,35 +1002,254 @@ export default function App() {
 
 // --- Shared Components ---
 
-function LandingPage({ onLogin }: { onLogin: () => void }) {
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center" style={{background: 'linear-gradient(160deg, #7f1d1d 0%, #b91c1c 40%, #dc2626 70%, #ef4444 100%)'}}>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-12"
-      >
-        <div className="w-24 h-24 bg-white/20 backdrop-blur-sm rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-black/20 border border-white/30">
-          <Sparkles className="w-12 h-12 text-white" />
-        </div>
-        <h1 className="font-display text-4xl font-bold text-white mb-4">Linq</h1>
-        <p className="text-white/60 text-lg max-w-xs mx-auto">
-          Collect stamps, unlock rewards, and support your favorite local businesses.
-        </p>
-      </motion.div>
+function LandingPage({ onLogin, onEmailSignUp, onEmailSignIn }: {
+  onLogin: () => void;
+  onEmailSignUp: (email: string, password: string) => Promise<string | null>;
+  onEmailSignIn: (email: string, password: string) => Promise<string | null>;
+}) {
+  const [mode, setMode] = React.useState<'home' | 'signin' | 'signup'>('home');
+  const [email, setEmail] = React.useState('');
+  const [password, setPassword] = React.useState('');
+  const [confirmPassword, setConfirmPassword] = React.useState('');
+  const [showPassword, setShowPassword] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
 
-      <div className="w-full max-w-xs space-y-4">
-        <button 
-          onClick={onLogin}
-          className="w-full bg-white text-brand-navy font-bold py-4 rounded-2xl flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg"
-        >
-          <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="" />
-          Continue with Google
-        </button>
-        <button className="w-full bg-white/15 backdrop-blur-sm text-white font-bold py-4 rounded-2xl hover:bg-white/25 transition-all border border-white/20">
-          Create Account
-        </button>
+  const reset = (next: 'home' | 'signin' | 'signup') => {
+    setError(''); setEmail(''); setPassword(''); setConfirmPassword(''); setMode(next);
+  };
+
+  const handleSubmit = async () => {
+    setError('');
+    if (!email.trim() || !password) { setError('Please fill in all fields'); return; }
+    if (mode === 'signup') {
+      if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+      if (password !== confirmPassword) { setError('Passwords do not match'); return; }
+    }
+    setLoading(true);
+    const err = mode === 'signup'
+      ? await onEmailSignUp(email.trim(), password)
+      : await onEmailSignIn(email.trim(), password);
+    setLoading(false);
+    if (err) setError(err);
+  };
+
+  const bg = { background: 'linear-gradient(160deg, #7f1d1d 0%, #b91c1c 40%, #dc2626 70%, #ef4444 100%)' };
+
+  if (mode === 'home') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center" style={bg}>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-12">
+          <div className="w-24 h-24 bg-white/20 backdrop-blur-sm rounded-[2rem] flex items-center justify-center mx-auto mb-8 shadow-2xl shadow-black/20 border border-white/30">
+            <Sparkles className="w-12 h-12 text-white" />
+          </div>
+          <h1 className="font-display text-4xl font-bold text-white mb-4">Linq</h1>
+          <p className="text-white/60 text-lg max-w-xs mx-auto">Collect stamps, unlock rewards, and support your favourite local businesses.</p>
+        </motion.div>
+        <div className="w-full max-w-xs space-y-3">
+          <button
+            onClick={onLogin}
+            className="w-full bg-white text-brand-navy font-bold py-4 rounded-2xl flex items-center justify-center gap-3 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="" />
+            Continue with Google
+          </button>
+          <button
+            onClick={() => reset('signup')}
+            className="w-full bg-white/15 backdrop-blur-sm text-white font-bold py-4 rounded-2xl hover:bg-white/25 transition-all border border-white/20"
+          >
+            Create Account
+          </button>
+          <button
+            onClick={() => reset('signin')}
+            className="w-full text-white/60 text-sm py-2 hover:text-white transition-colors"
+          >
+            Already have an account? Sign in
+          </button>
+        </div>
       </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col px-8" style={bg}>
+      <button onClick={() => reset('home')} className="flex items-center gap-2 text-white/70 hover:text-white transition-colors pt-14 mb-8">
+        <ArrowLeft size={18} />
+        <span className="text-sm font-medium">Back</span>
+      </button>
+
+      <div className="flex-1 flex flex-col justify-center max-w-xs mx-auto w-full">
+        <div className="mb-8">
+          <div className="w-14 h-14 bg-white/20 rounded-2xl flex items-center justify-center mb-4">
+            {mode === 'signup' ? <UserCheck className="w-7 h-7 text-white" /> : <Lock className="w-7 h-7 text-white" />}
+          </div>
+          <h2 className="font-display font-bold text-2xl text-white mb-1">
+            {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+          </h2>
+          <p className="text-white/50 text-sm">
+            {mode === 'signup' ? 'We\'ll send a verification email to confirm your address' : 'Sign in to continue to Linq'}
+          </p>
+        </div>
+
+        <div className="space-y-3">
+          <div className="relative">
+            <Mail size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+            <input
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="Email address"
+              autoComplete="email"
+              className="w-full pl-10 pr-5 py-4 rounded-2xl bg-white/15 border border-white/20 text-white placeholder:text-white/40 text-sm focus:outline-none focus:border-white/50 focus:bg-white/20"
+            />
+          </div>
+
+          <div className="relative">
+            <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Password"
+              autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+              onKeyDown={e => e.key === 'Enter' && !confirmPassword && handleSubmit()}
+              className="w-full pl-10 pr-12 py-4 rounded-2xl bg-white/15 border border-white/20 text-white placeholder:text-white/40 text-sm focus:outline-none focus:border-white/50 focus:bg-white/20"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(v => !v)}
+              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors"
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+
+          {mode === 'signup' && (
+            <div className="relative">
+              <Lock size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-white/40" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                value={confirmPassword}
+                onChange={e => setConfirmPassword(e.target.value)}
+                placeholder="Confirm password"
+                autoComplete="new-password"
+                onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+                className="w-full pl-10 pr-5 py-4 rounded-2xl bg-white/15 border border-white/20 text-white placeholder:text-white/40 text-sm focus:outline-none focus:border-white/50 focus:bg-white/20"
+              />
+            </div>
+          )}
+
+          {error && (
+            <div className="flex items-center gap-2 bg-red-900/40 border border-red-400/30 rounded-2xl px-4 py-3">
+              <AlertCircle size={14} className="text-red-300 shrink-0" />
+              <p className="text-red-200 text-xs">{error}</p>
+            </div>
+          )}
+
+          <button
+            onClick={handleSubmit}
+            disabled={loading}
+            className="w-full bg-white text-brand-navy font-bold py-4 rounded-2xl hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg disabled:opacity-60 flex items-center justify-center gap-2 mt-2"
+          >
+            {loading
+              ? <><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={16} /></motion.div> Please wait…</>
+              : mode === 'signup' ? 'Create Account' : 'Sign In'}
+          </button>
+
+          <div className="flex items-center gap-3 py-2">
+            <div className="flex-1 h-px bg-white/20" />
+            <span className="text-white/30 text-xs">or</span>
+            <div className="flex-1 h-px bg-white/20" />
+          </div>
+
+          <button
+            onClick={onLogin}
+            className="w-full bg-white/10 border border-white/20 text-white font-bold py-4 rounded-2xl flex items-center justify-center gap-3 hover:bg-white/20 transition-all"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="" />
+            Continue with Google
+          </button>
+
+          <button
+            onClick={() => reset(mode === 'signup' ? 'signin' : 'signup')}
+            className="w-full text-white/50 text-sm py-2 hover:text-white/80 transition-colors"
+          >
+            {mode === 'signup' ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmailVerificationScreen({ user, onCheck, onResend, onLogout }: {
+  user: FirebaseUser;
+  onCheck: () => Promise<boolean>;
+  onResend: () => Promise<void>;
+  onLogout: () => void;
+}) {
+  const [checking, setChecking] = React.useState(false);
+  const [resent, setResent] = React.useState(false);
+  const [notVerified, setNotVerified] = React.useState(false);
+
+  const handleCheck = async () => {
+    setChecking(true);
+    setNotVerified(false);
+    const verified = await onCheck();
+    if (!verified) setNotVerified(true);
+    setChecking(false);
+  };
+
+  const handleResend = async () => {
+    await onResend();
+    setResent(true);
+    setTimeout(() => setResent(false), 4000);
+  };
+
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center px-8 text-center bg-brand-bg">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-xs w-full">
+        <div className="w-16 h-16 bg-brand-gold/10 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Mail className="w-8 h-8 text-brand-gold" />
+        </div>
+        <h2 className="font-display font-bold text-2xl text-brand-navy mb-2">Check your inbox</h2>
+        <p className="text-brand-navy/50 text-sm mb-2">
+          We sent a verification email to
+        </p>
+        <p className="font-bold text-brand-navy text-sm mb-8">{user.email}</p>
+        <p className="text-brand-navy/40 text-xs mb-8">Click the link in the email, then come back here and tap the button below.</p>
+
+        {notVerified && (
+          <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 mb-4">
+            <AlertCircle size={14} className="text-amber-500 shrink-0" />
+            <p className="text-amber-700 text-xs text-left">Email not verified yet. Please click the link in your email first.</p>
+          </div>
+        )}
+
+        <div className="space-y-3">
+          <button
+            onClick={handleCheck}
+            disabled={checking}
+            className="w-full py-4 rounded-2xl bg-brand-navy text-white font-bold text-sm active:scale-[0.98] transition-all disabled:opacity-60 flex items-center justify-center gap-2"
+          >
+            {checking
+              ? <><motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={16} /></motion.div> Checking…</>
+              : <><CheckCircle2 size={16} /> I've verified my email</>}
+          </button>
+
+          <button
+            onClick={handleResend}
+            disabled={resent}
+            className="w-full py-3 text-sm text-brand-navy/50 hover:text-brand-navy/80 transition-colors disabled:opacity-50"
+          >
+            {resent ? 'Email sent!' : 'Resend verification email'}
+          </button>
+
+          <button onClick={onLogout} className="w-full py-3 text-xs text-brand-navy/30 hover:text-brand-navy/50 transition-colors">
+            Sign out
+          </button>
+        </div>
+      </motion.div>
     </div>
   );
 }
