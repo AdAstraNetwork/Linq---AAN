@@ -13,6 +13,7 @@ import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   sendEmailVerification,
+  applyActionCode,
   User as FirebaseUser
 } from 'firebase/auth';
 import {
@@ -637,6 +638,39 @@ export default function App() {
     return unsubscribe;
   }, []);
 
+  // Handle email verification link opened in-app (handleCodeInApp: true)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode');
+    const oobCode = params.get('oobCode');
+    if (mode !== 'verifyEmail' || !oobCode) return;
+
+    // Clear the action params from the URL immediately
+    window.history.replaceState({}, document.title, window.location.pathname);
+
+    applyActionCode(auth, oobCode)
+      .then(async () => {
+        const currentUser = auth.currentUser;
+        if (currentUser) await currentUser.reload();
+        setNeedsEmailVerification(false);
+        const refreshed = auth.currentUser;
+        if (!refreshed) return;
+        const userDoc = await getDoc(doc(db, 'users', refreshed.uid));
+        if (!userDoc.exists()) {
+          setNeedsRoleSelection(true);
+        } else {
+          const data = userDoc.data();
+          if (data.roleConfirmed === true && !data.onboardingComplete) {
+            setSelectedRole(data.role as 'consumer' | 'vendor');
+            setNeedsOnboarding(true);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error('Email verification failed:', err);
+      });
+  }, []);
+
   const handleLogin = async () => {
     const provider = new GoogleAuthProvider();
     try {
@@ -646,10 +680,12 @@ export default function App() {
     }
   };
 
+  const verificationActionSettings = { url: window.location.origin, handleCodeInApp: true };
+
   const handleEmailSignUp = async (email: string, password: string): Promise<string | null> => {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, password);
-      await sendEmailVerification(credential.user);
+      await sendEmailVerification(credential.user, verificationActionSettings);
       setNeedsEmailVerification(true);
       return null;
     } catch (err: any) {
@@ -671,7 +707,7 @@ export default function App() {
 
   const handleResendVerification = async () => {
     if (user && !user.emailVerified) {
-      await sendEmailVerification(user);
+      await sendEmailVerification(user, verificationActionSettings);
     }
   };
 
