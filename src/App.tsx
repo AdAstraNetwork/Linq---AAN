@@ -1888,6 +1888,8 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
   const [cardRewardInput, setCardRewardInput] = useState('');
   const [isSavingCard, setIsSavingCard] = useState(false);
   const [cardSaved, setCardSaved] = useState(false);
+  const [statModal, setStatModal] = useState<null | 'members' | 'stamps' | 'activeCards'>(null);
+  const [memberProfiles, setMemberProfiles] = useState<Map<string, UserProfile>>(new Map());
 
   useEffect(() => {
     if (!store) return;
@@ -1931,6 +1933,21 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
   const returnRate = totalMembers > 0 ? Math.round((returningUsers / totalMembers) * 100) : 0;
   const totalCompletedCycles = storeCards.reduce((sum, c) => sum + (c.total_completed_cycles || 0), 0);
   const redemptionRate = Math.round((totalCompletedCycles / Math.max(1, totalStampsGiven / stampsPerReward)) * 100);
+
+  const openStatModal = async (type: 'members' | 'stamps' | 'activeCards') => {
+    setStatModal(type);
+    const uids = [...new Set(storeCards.map(c => c.user_id))];
+    const missing = uids.filter(uid => !memberProfiles.has(uid));
+    if (missing.length === 0) return;
+    const chunks: string[][] = [];
+    for (let i = 0; i < missing.length; i += 10) chunks.push(missing.slice(i, i + 10));
+    const results = await Promise.all(
+      chunks.map(chunk => getDocs(query(collection(db, 'users'), where('uid', 'in', chunk))))
+    );
+    const updated = new Map(memberProfiles);
+    results.forEach(snap => snap.docs.forEach(d => updated.set(d.id, { uid: d.id, ...d.data() } as UserProfile)));
+    setMemberProfiles(updated);
+  };
 
   const handleIssueStamp = async () => {
     if (!customerHandle || !store) return;
@@ -2119,12 +2136,110 @@ function VendorApp({ activeTab, setActiveTab, profile, user, onViewUser, notific
           </header>
 
           <div className="grid grid-cols-2 gap-4">
-            <StatSquare icon={<Users className="text-blue-500" />} label="Members" value={String(totalMembers)} />
-            <StatSquare icon={<TrendingUp className="text-green-500" />} label="Stamps" value={String(totalStampsGiven)} />
-            <StatSquare icon={<Wallet className="text-purple-500" />} label="Active Cards" value={String(activeStoreCards)} />
+            <div onClick={() => openStatModal('members')} className="cursor-pointer active:scale-95 transition-transform">
+              <StatSquare icon={<Users className="text-blue-500" />} label="Members" value={String(totalMembers)} />
+            </div>
+            <div onClick={() => openStatModal('stamps')} className="cursor-pointer active:scale-95 transition-transform">
+              <StatSquare icon={<TrendingUp className="text-green-500" />} label="Stamps" value={String(totalStampsGiven)} />
+            </div>
+            <div onClick={() => openStatModal('activeCards')} className="cursor-pointer active:scale-95 transition-transform">
+              <StatSquare icon={<Wallet className="text-purple-500" />} label="Active Cards" value={String(activeStoreCards)} />
+            </div>
             <StatSquare icon={<RefreshCw className="text-orange-500" />} label="Return Rate" value={`${returnRate}%`} />
             <StatSquare icon={<Award className="text-brand-gold" />} label="Redemption Rate" value={`${redemptionRate}%`} />
           </div>
+
+          <AnimatePresence>
+            {statModal && (() => {
+              const titles: Record<string, string> = { members: 'Members', stamps: 'Stamps Breakdown', activeCards: 'Active Cards' };
+              const uniqueUids = [...new Set<string>(storeCards.map(c => c.user_id))];
+
+              const memberRows = uniqueUids.map(uid => {
+                const cards = storeCards.filter(c => c.user_id === uid);
+                const prof = memberProfiles.get(uid);
+                const totalStamps = cards.reduce((s, c) => s + (c.current_stamps || 0) + ((c.total_completed_cycles || 0) * stampsPerReward), 0);
+                const cycles = cards.reduce((s, c) => s + (c.total_completed_cycles || 0), 0);
+                return { uid, prof, totalStamps, cycles };
+              }).sort((a, b) => b.totalStamps - a.totalStamps);
+
+              const stampRows = [...storeCards].sort((a, b) => {
+                const ta = (a.current_stamps || 0) + ((a.total_completed_cycles || 0) * stampsPerReward);
+                const tb = (b.current_stamps || 0) + ((b.total_completed_cycles || 0) * stampsPerReward);
+                return tb - ta;
+              });
+
+              const activeRows = storeCards.filter(c => !c.isArchived).sort((a, b) => (b.current_stamps || 0) - (a.current_stamps || 0));
+
+              return (
+                <Modal title={titles[statModal]} onClose={() => setStatModal(null)}>
+                  <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-1">
+                    {statModal === 'members' && memberRows.map(({ uid, prof, totalStamps, cycles }) => (
+                      <div key={uid} className="flex items-center gap-3 p-3 rounded-2xl bg-brand-bg">
+                        <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-navy/10 shrink-0 flex items-center justify-center">
+                          {prof?.photoURL ? <img src={prof.photoURL} alt="" className="w-full h-full object-cover" /> : <Users size={16} className="text-brand-navy/30" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm truncate">{prof?.name || 'Unknown'}</p>
+                          <p className="text-[11px] text-brand-navy/40">@{prof?.handle || uid.slice(0, 8)}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-sm">{totalStamps} stamps</p>
+                          {cycles > 0 && <p className="text-[11px] text-brand-gold">{cycles}× completed</p>}
+                        </div>
+                      </div>
+                    ))}
+
+                    {statModal === 'stamps' && stampRows.map(card => {
+                      const prof = memberProfiles.get(card.user_id);
+                      const total = (card.current_stamps || 0) + ((card.total_completed_cycles || 0) * stampsPerReward);
+                      return (
+                        <div key={card.id} className="flex items-center gap-3 p-3 rounded-2xl bg-brand-bg">
+                          <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-navy/10 shrink-0 flex items-center justify-center">
+                            {prof?.photoURL ? <img src={prof.photoURL} alt="" className="w-full h-full object-cover" /> : <Users size={16} className="text-brand-navy/30" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm truncate">{prof?.name || 'Unknown'}</p>
+                            <p className="text-[11px] text-brand-navy/40">@{prof?.handle || card.user_id.slice(0, 8)}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="font-bold text-sm">{total} total</p>
+                            <p className="text-[11px] text-brand-navy/40">{card.current_stamps}/{stampsPerReward} current</p>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {statModal === 'activeCards' && activeRows.map(card => {
+                      const prof = memberProfiles.get(card.user_id);
+                      return (
+                        <div key={card.id} className="flex items-center gap-3 p-3 rounded-2xl bg-brand-bg">
+                          <div className="w-9 h-9 rounded-full overflow-hidden bg-brand-navy/10 shrink-0 flex items-center justify-center">
+                            {prof?.photoURL ? <img src={prof.photoURL} alt="" className="w-full h-full object-cover" /> : <Users size={16} className="text-brand-navy/30" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm truncate">{prof?.name || 'Unknown'}</p>
+                            <p className="text-[11px] text-brand-navy/40">@{prof?.handle || card.user_id.slice(0, 8)}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="font-bold text-sm">{card.current_stamps}/{stampsPerReward}</p>
+                            <div className="w-16 h-1.5 bg-brand-navy/10 rounded-full mt-1">
+                              <div className="h-full bg-brand-gold rounded-full" style={{ width: `${Math.min(100, ((card.current_stamps || 0) / stampsPerReward) * 100)}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {((statModal === 'members' && memberRows.length === 0) ||
+                      (statModal === 'stamps' && stampRows.length === 0) ||
+                      (statModal === 'activeCards' && activeRows.length === 0)) && (
+                      <p className="text-center text-brand-navy/30 py-8 font-bold text-sm">No data yet</p>
+                    )}
+                  </div>
+                </Modal>
+              );
+            })()}
+          </AnimatePresence>
 
           <div className="bg-brand-navy p-8 rounded-[2.5rem] text-white text-center">
             <h3 className="font-display text-xl font-bold mb-4">Issue a Stamp</h3>
