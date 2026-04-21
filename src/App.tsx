@@ -1402,6 +1402,7 @@ function OnboardingScreen({ user, role, onComplete }: {
   const [fullName, setFullName] = React.useState('');
   const [handle, setHandle] = React.useState('');
   const [handleError, setHandleError] = React.useState('');
+  const [handleChecking, setHandleChecking] = React.useState(false);
   const [gender, setGender] = React.useState('');
   const [birthday, setBirthday] = React.useState('');
 
@@ -1443,7 +1444,7 @@ function OnboardingScreen({ user, role, onComplete }: {
     : step === 1 ? !!category
     : step === 2 ? address.trim().length > 0 && phone.trim().length > 0
     : locationStatus === 'granted' || locationStatus === 'denied'
-    : step === 0 ? fullName.trim().length > 0 && handle.trim().length > 0 && !handleError
+    : step === 0 ? fullName.trim().length > 0 && handle.trim().length >= 3 && !handleError && !handleChecking
     : step === 1 ? !!gender
     : step === 2 ? !!birthday
     : locationStatus === 'granted' || locationStatus === 'denied';
@@ -1451,10 +1452,24 @@ function OnboardingScreen({ user, role, onComplete }: {
   const validateHandle = (val: string) => {
     const clean = val.toLowerCase().replace(/\s/g, '');
     setHandle(clean);
-    if (clean.length > 0 && clean.length < 3) setHandleError('Handle must be at least 3 characters');
-    else if (!/^[a-z0-9_]*$/.test(clean)) setHandleError('Only letters, numbers and underscores');
-    else setHandleError('');
+    if (clean.length > 0 && clean.length < 3) { setHandleError('Handle must be at least 3 characters'); setHandleChecking(false); return; }
+    if (!/^[a-z0-9_]*$/.test(clean)) { setHandleError('Only letters, numbers and underscores'); setHandleChecking(false); return; }
+    if (clean.length >= 3) { setHandleError(''); setHandleChecking(true); }
+    else { setHandleError(''); setHandleChecking(false); }
   };
+
+  React.useEffect(() => {
+    if (!handleChecking || handle.length < 3) return;
+    const timer = setTimeout(async () => {
+      try {
+        const snap = await getDocs(query(collection(db, 'users'), where('handle', '==', handle)));
+        if (!snap.empty) setHandleError('This handle is already taken');
+        else setHandleError('');
+      } catch { setHandleError(''); }
+      setHandleChecking(false);
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [handle, handleChecking]);
 
   const handleFinish = async () => {
     setSaving(true);
@@ -1491,11 +1506,23 @@ function OnboardingScreen({ user, role, onComplete }: {
               value={handle}
               onChange={e => validateHandle(e.target.value)}
               placeholder="yourhandle"
-              className={`w-full pl-9 pr-5 py-4 rounded-2xl bg-white border-2 text-brand-navy text-sm font-medium focus:outline-none focus:border-brand-gold/60 placeholder:text-brand-navy/30 ${handleError ? 'border-red-300' : 'border-brand-navy/10'}`}
+              className={`w-full pl-9 pr-8 py-4 rounded-2xl bg-white border-2 text-brand-navy text-sm font-medium focus:outline-none focus:border-brand-gold/60 placeholder:text-brand-navy/30 ${handleError ? 'border-red-300' : handle.length >= 3 && !handleChecking && !handleError ? 'border-green-400' : 'border-brand-navy/10'}`}
             />
+            {handle.length >= 3 && (
+              <span className="absolute right-4 top-1/2 -translate-y-1/2">
+                {handleChecking
+                  ? <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}><Sparkles size={13} className="text-brand-navy/30" /></motion.div>
+                  : handleError ? <AlertCircle size={13} className="text-red-400" />
+                  : <CheckCircle2 size={13} className="text-green-500" />}
+              </span>
+            )}
           </div>
           {handleError ? (
             <p className="text-xs text-red-500 mt-1.5 pl-1">{handleError}</p>
+          ) : handleChecking ? (
+            <p className="text-xs text-brand-navy/30 mt-1.5 pl-1">Checking availability…</p>
+          ) : handle.length >= 3 ? (
+            <p className="text-xs text-green-500 mt-1.5 pl-1">@{handle} is available</p>
           ) : (
             <p className="text-xs text-brand-navy/30 mt-1.5 pl-1">This cannot be changed later</p>
           )}
